@@ -1,0 +1,9 @@
+export enum CommandName {
+  AGENT = 'AGENT',
+  AGENT_FIX_CODE = 'AGENT_FIX_CODE',
+  CREATE_PR = 'CREATE_PR',
+  PR_REVIEW = 'PR_REVIEW',
+  PR_APPROVE = 'PR_APPROVE',
+  MERGE_PR = 'MERGE_PR',
+  NEW_SESSION = 'NEW_SESSION',
+}

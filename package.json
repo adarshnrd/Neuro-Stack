@@ -1,0 +1,38 @@
+{
+  "name": "project-jarvis",
+  "version": "1.0.0",
+  "description": "AI-Powered Git Workflow Assistant built with Node.js, LangChain, LangGraph, and Google Gemini.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist/"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.0.0",
+    "@langchain/google": "^0.1.9",
+    "@langchain/langgraph": "^1.2.6",
+    "@octokit/auth-app": "^7.1.4",
+    "@octokit/rest": "^21.0.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-handlebars": "^8.0.1",
+    "marked": "^15.0.6",
+    "highlight.js": "^11.11.1",
+    "simple-git": "^3.27.0",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.10",
+    "@types/ws": "^8.5.14",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

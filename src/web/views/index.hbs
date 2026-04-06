@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Jarvis</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <h2>Jarvis</h2>
+      <div id="sessions-list"></div>
+      <button id="new-session-btn">+ New Session</button>
+    </aside>
+    <main class="chat-container">
+      <div class="chat-header">
+        <h3>Active Session</h3>
+        <span id="connection-status">Connecting...</span>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <!-- Messages will appear here -->
+      </div>
+      <div class="chat-input-wrapper">
+        <textarea id="chat-input" placeholder="Ask Jarvis or type @ to see commands..."></textarea>
+        <button id="send-btn">Send</button>
+      </div>
+    </main>
+  </div>
+  <script src="/js/chat.js"></script>
+</body>
+</html>
