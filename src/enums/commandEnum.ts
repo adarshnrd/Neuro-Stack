@@ -6,4 +6,5 @@ export enum CommandName {
   PR_APPROVE = 'PR_APPROVE',
   MERGE_PR = 'MERGE_PR',
   NEW_SESSION = 'NEW_SESSION',
+  REVIEW = 'REVIEW',
 }

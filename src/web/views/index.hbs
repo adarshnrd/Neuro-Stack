@@ -3,30 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Jarvis — AI-Powered Git Workflow Assistant">
   <title>Project Jarvis</title>
+
+  <!-- Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- highlight.js theme (GitHub Dark) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+
+  <!-- App styles -->
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/review.css">
+
+  <!-- marked.js + highlight.js (CDN — no bundler needed) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.6/marked.min.js"></script>
 </head>
 <body>
   <div class="app-container">
-    <aside class="sidebar">
-      <h2>Jarvis</h2>
-      <div id="sessions-list"></div>
-      <button id="new-session-btn">+ New Session</button>
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">⚡</span>
+          <h2>Jarvis</h2>
+        </div>
+        <span class="version-badge">v1.0</span>
+      </div>
+      <div id="sessions-list" class="sessions-list">
+        <div class="session-item active">
+          <span class="session-dot"></span>
+          <span class="session-name">Active Session</span>
+        </div>
+      </div>
+      <button id="new-session-btn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        New Session
+      </button>
     </aside>
+
+    <!-- ── Main Chat ── -->
     <main class="chat-container">
       <div class="chat-header">
-        <h3>Active Session</h3>
-        <span id="connection-status">Connecting...</span>
+        <div class="header-left">
+          <button id="sidebar-toggle" class="icon-btn" title="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <h3>Active Session</h3>
+        </div>
+        <div class="header-right">
+          <span id="connection-status" class="status-badge">
+            <span class="status-dot"></span>
+            Connecting...
+          </span>
+        </div>
       </div>
-      <div class="chat-messages" id="chat-messages">
-        <!-- Messages will appear here -->
+
+      <!-- Welcome Screen (shown when empty) -->
+      <div class="welcome-screen" id="welcome-screen">
+        <div class="welcome-icon">⚡</div>
+        <h2>Welcome to Jarvis</h2>
+        <p class="welcome-sub">Your AI-powered Git workflow assistant</p>
+        <div class="quick-actions">
+          <button class="quick-action" data-prompt="Explain the project structure">
+            <span class="qa-icon">📁</span>
+            <span>Explain project structure</span>
+          </button>
+          <button class="quick-action" data-prompt="Review my latest code changes">
+            <span class="qa-icon">🔍</span>
+            <span>Review code changes</span>
+          </button>
+          <button class="quick-action" data-prompt="Help me create a pull request">
+            <span class="qa-icon">🔀</span>
+            <span>Create a pull request</span>
+          </button>
+          <button class="quick-action" data-prompt="Suggest improvements for the codebase">
+            <span class="qa-icon">💡</span>
+            <span>Suggest improvements</span>
+          </button>
+        </div>
       </div>
-      <div class="chat-input-wrapper">
-        <textarea id="chat-input" placeholder="Ask Jarvis or type @ to see commands..."></textarea>
-        <button id="send-btn">Send</button>
+
+      <!-- Chat messages -->
+      <div class="chat-messages" id="chat-messages"></div>
+
+      <!-- Input area -->
+      <div class="chat-input-area">
+        <div id="command-popup" class="command-popup"></div>
+        <div class="chat-input-wrapper">
+          <textarea id="chat-input" placeholder="Ask Jarvis anything, or type @ for commands..." rows="1"></textarea>
+          <button id="send-btn" title="Send message (Enter)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="input-footer">
+          <span class="input-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line · <kbd>@</kbd> for commands</span>
+        </div>
       </div>
     </main>
   </div>
+
+  <!-- Review Panel (slide-out overlay) -->
+  <div id="review-panel" class="review-panel">
+    <div class="review-header">
+      <div class="review-title">Review Changes</div>
+      <button class="review-close-btn" id="review-close-btn" title="Close">×</button>
+    </div>
+    <div class="review-body">
+      <aside class="review-file-tree" id="review-file-tree"></aside>
+      <div class="review-diff-area">
+        <div class="diff-view-toggle">
+          <button id="toggle-unified" class="active">Unified</button>
+          <button id="toggle-split">Split</button>
+        </div>
+        <div class="diff-content" id="diff-content"></div>
+      </div>
+    </div>
+    <div class="review-actions">
+      <div class="review-feedback-area">
+        <textarea id="review-feedback-input" placeholder="Provide feedback or request revisions..."></textarea>
+      </div>
+      <div class="review-action-btns">
+        <button id="review-accept-btn" class="btn-accept">Accept Changes</button>
+        <button id="review-reject-btn" class="btn-reject">Reject</button>
+        <button id="review-revise-btn" class="btn-revise">Request Changes</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/chat.js"></script>
+  <script src="/js/review.js"></script>
 </body>
 </html>

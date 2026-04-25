@@ -2,11 +2,14 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { GitHubService } from '../services/githubService.js';
 import { ReviewEvent, MergeMethod, PRState } from '../enums/gitEnum.js';
+import { createChildLogger } from '../logger/index.js';
 
+const log = createChildLogger('githubTools');
 const githubService = new GitHubService();
 
 export const createPullRequest = tool(
   async ({ title, head, base, body }) => {
+    log.info('Tool executed: Create Pull Request', { source: 'githubTools#createPullRequest', title, head, base });
     const result = await githubService.createPullRequest(title, head, base, body);
     return `Successfully created PR #${result.number} at ${result.url}`;
   },
@@ -24,6 +27,7 @@ export const createPullRequest = tool(
 
 export const getPullRequest = tool(
   async ({ prNumber }) => {
+    log.info('Tool executed: Get Pull Request', { source: 'githubTools#getPullRequest', prNumber });
     const pr = await githubService.getPullRequest(prNumber);
     return JSON.stringify(pr, null, 2);
   },
@@ -38,6 +42,7 @@ export const getPullRequest = tool(
 
 export const getPullRequestDiff = tool(
   async ({ prNumber }) => {
+    log.info('Tool executed: Get Pull Request Diff', { source: 'githubTools#getPullRequestDiff', prNumber });
     return await githubService.getPullRequestDiff(prNumber);
   },
   {
@@ -51,6 +56,7 @@ export const getPullRequestDiff = tool(
 
 export const submitReview = tool(
   async ({ prNumber, body, event }) => {
+    log.info('Tool executed: Submit Review', { source: 'githubTools#submitReview', prNumber, event });
     await githubService.submitReview(prNumber, body, event as ReviewEvent);
     return `Successfully submitted review for PR #${prNumber} with event ${event}`;
   },
@@ -69,6 +75,7 @@ export const submitReview = tool(
 // but we provide it as a tool if needed (though it should be safeguarded).
 export const mergePullRequest = tool(
   async ({ prNumber, method }) => {
+    log.info('Tool executed: Merge Pull Request', { source: 'githubTools#mergePullRequest', prNumber, method });
     await githubService.mergePullRequest(prNumber, method as MergeMethod);
     return `Successfully merged PR #${prNumber} using ${method || 'merge'} method.`;
   },
@@ -84,6 +91,7 @@ export const mergePullRequest = tool(
 
 export const listPullRequests = tool(
   async ({ state }) => {
+    log.info('Tool executed: List Pull Requests', { source: 'githubTools#listPullRequests', state });
     const prs = await githubService.listPullRequests((state as PRState) || PRState.OPEN);
     return JSON.stringify(prs.map((pr: any) => ({
       number: pr.number,

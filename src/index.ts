@@ -1,78 +1,54 @@
 import express from 'express';
-import { createServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { engine } from 'express-handlebars';
 import { config } from './config/index.js';
-import { logger } from './logger/index.js';
+import { createChildLogger } from './logger/index.js';
 import router from './web/routes/index.js';
-import { commandRegistry, NewSessionHandler, parseUserInput } from './commands/index.js';
-import { buildGraph } from './graph/index.js';
+import { commandRegistry, NewSessionHandler, AgentHandler } from './commands/index.js';
+import { changeSetService } from './services/changeSetService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const log = createChildLogger('bootstrap');
 
 async function bootstrap() {
-  logger.info('Starting Project Jarvis...');
+  log.info('Starting Project Jarvis...', { source: 'index#bootstrap', env: config.server.host });
+
+  // Load pending changesets from disk
+  log.debug('Loading changesets from disk', { source: 'index#bootstrap' });
+  await changeSetService.loadFromDisk();
   
   const app = express();
-  const server = createServer(app);
-  const wss = new WebSocketServer({ server });
 
-  // Register handlers
+  // Register command handlers
+  log.debug('Registering command handlers', { source: 'index#bootstrap' });
   commandRegistry.register(new NewSessionHandler());
+  commandRegistry.register(new AgentHandler());
 
-  // Basic graph build test
-  const graph = buildGraph();
-
+  // Handlebars view engine
+  log.debug('Configuring template engine', { source: 'index#bootstrap' });
   app.engine('hbs', engine({
     extname: '.hbs',
-    defaultLayout: false, // Set to false since layouts directory is empty for now
+    defaultLayout: false,
   }));
   app.set('view engine', 'hbs');
   app.set('views', path.join(__dirname, 'web', 'views'));
 
+  // Middleware
+  log.debug('Mounting middleware', { source: 'index#bootstrap' });
   app.use(express.static('public'));
   app.use(express.json());
 
-  // Use combined routes
+  // Routes (view + API)
   app.use(router);
 
-  wss.on('connection', (ws: WebSocket) => {
-    logger.info('WebSocket client connected');
-
-    ws.on('message', async (message: string) => {
-      try {
-        const text = message.toString();
-        logger.info(`Received message: ${text}`);
-        
-        const parsedCommand = parseUserInput(text);
-        
-        if (parsedCommand.isCommand) {
-          ws.send(JSON.stringify({
-            type: 'system',
-            content: `Command received: ${parsedCommand.command}`
-          }));
-        } else {
-          // Dummy response
-          ws.send(JSON.stringify({
-            type: 'ai',
-            content: `Echo: ${text}`
-          }));
-        }
-      } catch (error: any) {
-        logger.error('WebSocket message error', { error });
-      }
-    });
-  });
-
-  server.listen(config.server.port, () => {
-    logger.info(`Server running on http://${config.server.host}:${config.server.port}`);
+  app.listen(config.server.port, () => {
+    log.info(`Server running on http://${config.server.host}:${config.server.port}`, { source: 'index#bootstrap' });
   });
 }
 
-bootstrap().catch((error) => {
-  logger.error('Failed to bootstrap app', { error });
+bootstrap().catch((error: any) => {
+  log.error('Failed to bootstrap app', { source: 'index#bootstrap', error: error.message, stack: error.stack });
   process.exit(1);
 });

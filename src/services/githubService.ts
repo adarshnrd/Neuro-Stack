@@ -2,19 +2,21 @@ import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 import { config } from '../config/index.js';
 import { GitHubApiError } from '../errors/gitError.js';
-import { logger } from '../logger/index.js';
+import { createChildLogger } from '../logger/index.js';
 import { MergeMethod, ReviewEvent, PRState } from '../enums/gitEnum.js';
 
-export class GitHubService {
-  private octokit: Octokit;
+const log = createChildLogger('githubService');
 
-  constructor() {
+export class GitHubService {
+  private readonly octokit: Octokit;
+
+  public constructor() {
     this.octokit = this.initializeOctokit();
   }
 
   private initializeOctokit(): Octokit {
     if (config.github.authMode === 'app') {
-      logger.info('Initializing GitHub API with App Auth');
+      log.info('Initializing GitHub API with App Auth', { source: 'githubService#initializeOctokit' });
       return new Octokit({
         authStrategy: createAppAuth,
         auth: {
@@ -25,15 +27,16 @@ export class GitHubService {
       });
     }
 
-    logger.info('Initializing GitHub API with PAT Auth');
+    log.info('Initializing GitHub API with PAT Auth', { source: 'githubService#initializeOctokit' });
     return new Octokit({
       auth: config.github.token,
     });
   }
 
-  async createPullRequest(title: string, head: string, base: string, body: string) {
+  public async createPullRequest(title: string, head: string, base: string, body: string) {
+    const startTime = Date.now();
     try {
-      logger.info('Creating pull request', { title, head, base });
+      log.info('Creating pull request', { source: 'githubService#createPullRequest', title, head, base });
       const { data } = await this.octokit.rest.pulls.create({
         owner: config.github.owner,
         repo: config.github.repo,
@@ -42,32 +45,38 @@ export class GitHubService {
         base,
         body,
       });
+      log.debug('Pull request created successfully', { source: 'githubService#createPullRequest', prNumber: data.number, durationMs: Date.now() - startTime });
       return {
         number: data.number,
         url: data.html_url,
       };
     } catch (error: any) {
+      log.error('Failed to create PR', { source: 'githubService#createPullRequest', error: error.message });
       throw new GitHubApiError('createPR', error.message, error.status, { head, base });
     }
   }
 
-  async getPullRequest(prNumber: number) {
+  public async getPullRequest(prNumber: number) {
+    const startTime = Date.now();
     try {
-      logger.info('Fetching pull request', { prNumber });
+      log.info('Fetching pull request', { source: 'githubService#getPullRequest', prNumber });
       const { data } = await this.octokit.rest.pulls.get({
         owner: config.github.owner,
         repo: config.github.repo,
         pull_number: prNumber,
       });
+      log.debug('Pull request fetched successfully', { source: 'githubService#getPullRequest', durationMs: Date.now() - startTime });
       return data;
     } catch (error: any) {
+      log.error('Failed to get PR', { source: 'githubService#getPullRequest', error: error.message });
       throw new GitHubApiError('getPR', error.message, error.status, { prNumber });
     }
   }
 
-  async getPullRequestDiff(prNumber: number): Promise<string> {
+  public async getPullRequestDiff(prNumber: number): Promise<string> {
+    const startTime = Date.now();
     try {
-      logger.info('Fetching PR diff', { prNumber });
+      log.info('Fetching PR diff', { source: 'githubService#getPullRequestDiff', prNumber });
       const { data } = await this.octokit.rest.pulls.get({
         owner: config.github.owner,
         repo: config.github.repo,
@@ -76,15 +85,19 @@ export class GitHubService {
           format: 'diff',
         },
       });
-      return data as unknown as string;
+      const diffStr = data as unknown as string;
+      log.debug('PR diff fetched successfully', { source: 'githubService#getPullRequestDiff', diffLength: diffStr.length, durationMs: Date.now() - startTime });
+      return diffStr;
     } catch (error: any) {
+      log.error('Failed to get PR diff', { source: 'githubService#getPullRequestDiff', error: error.message });
       throw new GitHubApiError('getPRDiff', error.message, error.status, { prNumber });
     }
   }
 
-  async submitReview(prNumber: number, body: string, event: ReviewEvent) {
+  public async submitReview(prNumber: number, body: string, event: ReviewEvent) {
+    const startTime = Date.now();
     try {
-      logger.info('Submitting PR review', { prNumber, event });
+      log.info('Submitting PR review', { source: 'githubService#submitReview', prNumber, event });
       await this.octokit.rest.pulls.createReview({
         owner: config.github.owner,
         repo: config.github.repo,
@@ -92,35 +105,43 @@ export class GitHubService {
         body,
         event, // APPROVE, REQUEST_CHANGES, COMMENT
       });
+      log.debug('PR review submitted successfully', { source: 'githubService#submitReview', durationMs: Date.now() - startTime });
     } catch (error: any) {
+      log.error('Failed to submit review', { source: 'githubService#submitReview', error: error.message });
       throw new GitHubApiError('submitReview', error.message, error.status, { prNumber, event });
     }
   }
 
-  async mergePullRequest(prNumber: number, method: MergeMethod = MergeMethod.MERGE) {
+  public async mergePullRequest(prNumber: number, method: MergeMethod = MergeMethod.MERGE) {
+    const startTime = Date.now();
     try {
-      logger.info('Merging PR', { prNumber, method });
+      log.info('Merging PR', { source: 'githubService#mergePullRequest', prNumber, method });
       await this.octokit.rest.pulls.merge({
         owner: config.github.owner,
         repo: config.github.repo,
         pull_number: prNumber,
         merge_method: method,
       });
+      log.debug('PR merged successfully', { source: 'githubService#mergePullRequest', durationMs: Date.now() - startTime });
     } catch (error: any) {
+      log.error('Failed to merge PR', { source: 'githubService#mergePullRequest', error: error.message });
       throw new GitHubApiError('mergePR', error.message, error.status, { prNumber, method });
     }
   }
 
-  async listPullRequests(state: PRState = PRState.OPEN) {
+  public async listPullRequests(state: PRState = PRState.OPEN) {
+    const startTime = Date.now();
     try {
-      logger.info('Listing PRs', { state });
+      log.info('Listing PRs', { source: 'githubService#listPullRequests', state });
       const { data } = await this.octokit.rest.pulls.list({
         owner: config.github.owner,
         repo: config.github.repo,
         state,
       });
+      log.debug('PR list fetched successfully', { source: 'githubService#listPullRequests', count: data.length, durationMs: Date.now() - startTime });
       return data;
     } catch (error: any) {
+      log.error('Failed to list PRs', { source: 'githubService#listPullRequests', error: error.message });
       throw new GitHubApiError('listPRs', error.message, error.status, { state });
     }
   }

@@ -1,11 +1,14 @@
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { GitService } from '../services/gitService.js';
+import { createChildLogger } from '../logger/index.js';
 
+const log = createChildLogger('gitTools');
 const gitService = new GitService();
 
 export const cloneRepository = tool(
   async ({ url }) => {
+    log.info('Tool executed: Clone Repository', { source: 'gitTools#cloneRepository', url });
     await gitService.cloneRepository(url);
     return `Successfully cloned ${url}`;
   },
@@ -20,6 +23,7 @@ export const cloneRepository = tool(
 
 export const createBranch = tool(
   async ({ branchName }) => {
+    log.info('Tool executed: Create Branch', { source: 'gitTools#createBranch', branchName });
     await gitService.createBranch(branchName);
     return `Successfully created and checked out branch ${branchName}`;
   },
@@ -34,6 +38,7 @@ export const createBranch = tool(
 
 export const checkoutBranch = tool(
   async ({ branchName }) => {
+    log.info('Tool executed: Checkout Branch', { source: 'gitTools#checkoutBranch', branchName });
     await gitService.checkoutBranch(branchName);
     return `Successfully checked out branch ${branchName}`;
   },
@@ -48,6 +53,7 @@ export const checkoutBranch = tool(
 
 export const stageFiles = tool(
   async ({ files }) => {
+    log.info('Tool executed: Stage Files', { source: 'gitTools#stageFiles', fileCount: files?.length || 'all' });
     await gitService.stageFiles(files);
     return `Successfully staged files: ${files ? files.join(', ') : 'all files'}`;
   },
@@ -62,6 +68,7 @@ export const stageFiles = tool(
 
 export const commitChanges = tool(
   async ({ message }) => {
+    log.info('Tool executed: Commit Changes', { source: 'gitTools#commitChanges', messageLength: message.length });
     await gitService.commitChanges(message);
     return `Successfully committed changes with message: "${message}"`;
   },
@@ -76,6 +83,7 @@ export const commitChanges = tool(
 
 export const pushBranch = tool(
   async ({ branchName }) => {
+    log.info('Tool executed: Push Branch', { source: 'gitTools#pushBranch', branchName });
     await gitService.pushBranch(branchName);
     return `Successfully pushed branch ${branchName} to origin`;
   },
@@ -90,6 +98,7 @@ export const pushBranch = tool(
 
 export const getCurrentBranch = tool(
   async () => {
+    log.info('Tool executed: Get Current Branch', { source: 'gitTools#getCurrentBranch' });
     const branch = await gitService.getCurrentBranch();
     return `Current branch is ${branch}`;
   },
@@ -102,6 +111,7 @@ export const getCurrentBranch = tool(
 
 export const getDiff = tool(
   async ({ base, head }) => {
+    log.info('Tool executed: Get Diff', { source: 'gitTools#getDiff', base, head });
     return await gitService.getDiff(base, head);
   },
   {
@@ -110,6 +120,49 @@ export const getDiff = tool(
     schema: z.object({
       base: z.string().describe('The base branch or commit (e.g. main)'),
       head: z.string().describe('The head branch or commit (e.g. HEAD)'),
+    }),
+  }
+);
+
+export const stashChanges = tool(
+  async ({ message }) => {
+    log.info('Tool executed: Stash Changes', { source: 'gitTools#stashChanges', message });
+    await gitService.stashChanges(message);
+    return `Successfully stashed changes${message ? ` with message: "${message}"` : ''}`;
+  },
+  {
+    name: 'stash_changes',
+    description: 'Stash currently modified but uncommitted files',
+    schema: z.object({
+      message: z.string().optional().describe('Optional message for the stash entry'),
+    }),
+  }
+);
+
+export const popStash = tool(
+  async () => {
+    log.info('Tool executed: Pop Stash', { source: 'gitTools#popStash' });
+    await gitService.popStash();
+    return 'Successfully popped the latest stash';
+  },
+  {
+    name: 'pop_stash',
+    description: 'Pop the most recent stash onto the current working tree, removing it from the stash list',
+    schema: z.object({}),
+  }
+);
+
+export const applyStash = tool(
+  async ({ stashIndex }) => {
+    log.info('Tool executed: Apply Stash', { source: 'gitTools#applyStash', stashIndex });
+    await gitService.applyStash(stashIndex);
+    return `Successfully applied stash@{${stashIndex}}`;
+  },
+  {
+    name: 'apply_stash',
+    description: 'Apply a specific stash without removing it from the stash list. Defaults to the most recent stash (0) if not specified.',
+    schema: z.object({
+      stashIndex: z.number().default(0).describe('The index of the stash to apply (e.g. 0 for stash@{0})'),
     }),
   }
 );
@@ -123,4 +176,7 @@ export const ALL_GIT_TOOLS = [
   pushBranch,
   getCurrentBranch,
   getDiff,
+  stashChanges,
+  popStash,
+  applyStash,
 ];

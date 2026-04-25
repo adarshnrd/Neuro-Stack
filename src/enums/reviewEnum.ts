@@ -1,0 +1,12 @@
+export enum ChangeSetStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  REVISION_REQUESTED = 'REVISION_REQUESTED',
+}
+
+export enum FileChangeStatus {
+  ADDED = 'ADDED',
+  MODIFIED = 'MODIFIED',
+  DELETED = 'DELETED',
+}
