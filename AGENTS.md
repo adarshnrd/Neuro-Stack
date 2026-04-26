@@ -133,6 +133,26 @@ catch (error: any) {
 
 **Rule:** All folders and files in this project use **camelCase** uniformly. New files and folders MUST follow this convention.
 
+### Descriptive Identifier Requirement
+
+All identifiers — variables, parameters, functions, classes, properties, and enum members — **MUST use clear, intent-driven names** that reflect the purpose and context of the logic. Vague, abbreviated, or non-descriptive names are strictly prohibited.
+
+```typescript
+// WRONG — vague, meaningless identifiers
+const a = getUser();
+const b = a.sessions;
+function dka(x: string) { ... }
+const tmp = rows.filter((r) => r.active);
+
+// CORRECT — descriptive, intent-driven identifiers
+const currentUser = getUser();
+const activeSessions = currentUser.sessions;
+function deleteKeysByAge(keyPrefix: string) { ... }
+const activeRows = rows.filter((row) => row.active);
+```
+
+**Rule:** Single-character names are only acceptable in trivial arrow-function predicates (e.g., `.map((x) => x.id)`) where the context is immediately obvious. In all other cases, use a full descriptive name.
+
 ---
 
 ## Import / Export Conventions
@@ -183,7 +203,7 @@ catch (error: any) {
 ### Type Centralization
 
 - **All reusable types** MUST be defined under `src/types/`, grouped by domain
-- **Do not** define inline type aliases inside `services/`, `commands/`, `memory/`, or `tools/` — centralize in `types/` and import
+- **Do not** define inline type aliases or complex object types (e.g., in `.map()` or `.filter()` callbacks) inside `services/`, `commands/`, `memory/`, or `tools/` — centralize in `types/` and import
 - One exception: one-off interfaces tightly coupled to a single file (e.g., `AssembledContext` in `contextService.ts`) may stay local until reused elsewhere
 
 ### Interface Patterns
@@ -204,6 +224,14 @@ export interface CommandHandler {
   name: CommandName;
   description: string;
   execute(args: CommandArgs, sessionId: string): Promise<CommandResult>;
+}
+
+// types/githubTypes.ts — domain-grouped interfaces
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  state: string;
+  url: string;
 }
 ```
 
@@ -700,6 +728,32 @@ export enum CommandName {
 - Enum members: SCREAMING_SNAKE_CASE for command/action enums, lowercase string values for API enums (`MergeMethod`, `PRState`)
 - One file per domain, barrel re-export in `enums/index.ts`
 - Always use enum references (not string literals) in application code
+- **Inline string union types MUST be replaced with enums.** Whenever a type like `'user' | 'assistant' | 'system' | 'error'` is needed, define it as a properly structured enum with explicitly assigned values, place it in the appropriate `enums/` file, and reference the enum consistently across the codebase
+
+### String Union → Enum Migration Pattern
+
+Do **not** use inline string union types for domain values that appear in more than one location. Instead, define a dedicated enum:
+
+```typescript
+// WRONG — inline string union scattered across files
+role: 'user' | 'assistant' | 'system' | 'error';
+
+// CORRECT — dedicated enum in enums/
+export enum ConversationRole {
+  USER = 'user',
+  ASSISTANT = 'assistant',
+  SYSTEM = 'system',
+  ERROR = 'error',
+}
+
+// Usage — always reference the enum, never the raw string
+import { ConversationRole } from '../enums/index.js';
+role: ConversationRole;
+// ...
+if (message.role === ConversationRole.USER) { ... }
+```
+
+**Rule:** When introducing or encountering a string union type that represents a finite set of domain values (roles, statuses, categories, etc.), extract it into an enum with explicit string values and update all references to use the enum.
 
 ---
 

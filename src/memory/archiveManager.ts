@@ -47,8 +47,10 @@ export class ArchiveManager {
       log.info('Cleanup strategy complete', { source: 'archiveManager#runCleanup', deletedCount });
 
       // We'll leave session cleanup logic to SessionService, which iterates active sessions.
-    } catch (error: any) {
-      log.error('Failed to run cleanup', { source: 'archiveManager#runCleanup', error: error.message, stack: error.stack });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      log.error('Failed to run cleanup', { source: 'archiveManager#runCleanup', error: message, stack: stack });
     }
   }
 

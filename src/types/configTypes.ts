@@ -39,6 +39,11 @@ export interface LogConfig {
   level: string;
 }
 
+export interface DatabaseConfig {
+  projectUrl: string;
+  apiKey: string;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   llm: LLMConfig;
@@ -47,4 +52,5 @@ export interface AppConfig {
   context: ContextConfig;
   session: SessionConfig;
   log: LogConfig;
+  database: DatabaseConfig;
 }

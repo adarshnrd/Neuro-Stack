@@ -2,6 +2,8 @@
  * Project Jarvis — Chat Client
  * Premium chat UI with markdown rendering, streaming effect,
  * code copy buttons, message actions, and @ command autocomplete.
+ *
+ * Updated: Auth-aware, multi-session support, paginated conversation history.
  */
 document.addEventListener('DOMContentLoaded', () => {
   // ── DOM References ──
@@ -19,6 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let availableCommands  = [];
   let selectedCommandIdx = -1;
   let isSending          = false;
+
+  // ── Pagination state ──
+  let oldestCursor       = null;
+  let hasMoreMessages    = false;
+  let isLoadingHistory   = false;
+
+  // ── Auth state ──
+  let currentUser        = null;
 
   // ── Configure marked.js ──
   if (window.marked) {
@@ -42,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Initialize ──
   setStatus('ready', 'Ready');
   fetchCommands();
+  checkAuth();
 
   // ── Sidebar toggle ──
   sidebarToggle?.addEventListener('click', () => {
@@ -64,6 +75,220 @@ document.addEventListener('DOMContentLoaded', () => {
     inputEl.style.height = 'auto';
     inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px';
   });
+
+  // ── Scroll-up pagination ──
+  messagesContainer.addEventListener('scroll', () => {
+    if (
+      messagesContainer.scrollTop < 60 &&
+      hasMoreMessages &&
+      !isLoadingHistory &&
+      sessionId
+    ) {
+      loadOlderMessages();
+    }
+  });
+
+  // ═══════════════════════════════════════════════
+  //  AUTH
+  // ═══════════════════════════════════════════════
+
+  async function checkAuth() {
+    try {
+      const res = await fetch('/api/auth/me');
+      const data = await res.json();
+
+      if (data.success && data.user) {
+        currentUser = data.user;
+        renderUserInfo();
+        loadSessions();
+      }
+      // If not authenticated in dev mode, still allow usage
+    } catch (_) {
+      // Auth check failed — may be dev mode, continue
+    }
+  }
+
+  function renderUserInfo() {
+    const userInfoEl = document.getElementById('user-info');
+    if (userInfoEl && currentUser) {
+      userInfoEl.innerHTML = `
+        <span class="user-name">${escapeHtml(currentUser.username)}</span>
+        <span class="user-role">${currentUser.role}</span>
+        <button id="logout-btn" class="logout-btn" title="Logout">🚪</button>
+      `;
+      document.getElementById('logout-btn')?.addEventListener('click', handleLogout);
+    }
+  }
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
+
+  // ═══════════════════════════════════════════════
+  //  SESSIONS
+  // ═══════════════════════════════════════════════
+
+  async function loadSessions() {
+    try {
+      const res = await fetch('/api/sessions');
+      const data = await res.json();
+      renderSessionList(data.sessions || []);
+    } catch (err) {
+      console.error('Failed to load sessions', err);
+    }
+  }
+
+  function renderSessionList(sessions) {
+    const listEl = document.getElementById('session-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    // New Chat button
+    const newBtn = document.createElement('button');
+    newBtn.className = 'session-item new-session-btn';
+    newBtn.innerHTML = '<span>＋</span> New Chat';
+    newBtn.addEventListener('click', createNewSession);
+    listEl.appendChild(newBtn);
+
+    // Session items
+    sessions.forEach((s) => {
+      const item = document.createElement('div');
+      item.className = 'session-item' + (s.id === sessionId ? ' active' : '');
+      item.dataset.sessionId = s.id;
+
+      const title = s.title || 'Untitled Chat';
+      const time = new Date(s.lastActiveAt).toLocaleDateString([], {
+        month: 'short', day: 'numeric',
+      });
+
+      item.innerHTML = `
+        <span class="session-title">${escapeHtml(title)}</span>
+        <span class="session-time">${time}</span>
+      `;
+      item.addEventListener('click', () => switchSession(s.id));
+      listEl.appendChild(item);
+    });
+  }
+
+  async function createNewSession() {
+    if (!currentUser) return;
+
+    try {
+      const res = await fetch('/api/sessions', { method: 'POST' });
+      const data = await res.json();
+      if (data.session) {
+        sessionId = data.session.id;
+        messagesContainer.innerHTML = '';
+        oldestCursor = null;
+        hasMoreMessages = false;
+        showWelcomeScreen();
+        loadSessions();
+      }
+    } catch (err) {
+      console.error('Failed to create session', err);
+    }
+  }
+
+  async function switchSession(newSessionId) {
+    if (newSessionId === sessionId) return;
+
+    sessionId = newSessionId;
+    messagesContainer.innerHTML = '';
+    oldestCursor = null;
+    hasMoreMessages = false;
+
+    showChatArea();
+    setStatus('thinking', 'Loading...');
+
+    // Load conversation history for this session
+    await loadConversationHistory();
+
+    setStatus('ready', 'Ready');
+
+    // Update active indicator in sidebar
+    document.querySelectorAll('.session-item').forEach((el) => {
+      el.classList.toggle('active', el.dataset?.sessionId === sessionId);
+    });
+  }
+
+  async function loadConversationHistory() {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/conversations?limit=10`);
+      const data = await res.json();
+
+      if (data.conversations && data.conversations.length > 0) {
+        data.conversations.forEach((msg) => renderHistoryMessage(msg));
+        scrollToBottom();
+      }
+
+      oldestCursor = data.nextCursor;
+      hasMoreMessages = data.hasMore;
+    } catch (err) {
+      console.error('Failed to load conversation history', err);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!oldestCursor || isLoadingHistory) return;
+
+    isLoadingHistory = true;
+
+    // Show loading indicator at top
+    const loader = document.createElement('div');
+    loader.className = 'history-loader';
+    loader.textContent = 'Loading older messages...';
+    messagesContainer.prepend(loader);
+
+    try {
+      const res = await fetch(
+        `/api/sessions/${sessionId}/conversations?cursor=${oldestCursor}&limit=10`
+      );
+      const data = await res.json();
+
+      loader.remove();
+
+      if (data.conversations && data.conversations.length > 0) {
+        const previousHeight = messagesContainer.scrollHeight;
+
+        // Prepend messages in chronological order (oldest first)
+        data.conversations.forEach((msg) => {
+          renderHistoryMessage(msg, true); // true = prepend
+        });
+
+        // Preserve scroll position
+        messagesContainer.scrollTop = messagesContainer.scrollHeight - previousHeight;
+      }
+
+      oldestCursor = data.nextCursor;
+      hasMoreMessages = data.hasMore;
+    } catch (err) {
+      loader.remove();
+      console.error('Failed to load older messages', err);
+    } finally {
+      isLoadingHistory = false;
+    }
+  }
+
+  /**
+   * Renders a message from DB history using the SAME visual functions
+   * as live messages, but WITHOUT streaming animation.
+   */
+  function renderHistoryMessage(msg, prepend = false) {
+    if (msg.role === 'user') {
+      appendUserMessage(msg.content, new Date(msg.createdAt), prepend);
+    } else {
+      const type = msg.responseType === 'error' ? 'error'
+        : msg.responseType === 'system' ? 'system' : 'jarvis';
+      appendAIMessage(msg.content, type, msg.metadata, false, new Date(msg.createdAt), prepend);
+    }
+  }
+
+  function showWelcomeScreen() {
+    if (welcomeScreen) welcomeScreen.classList.remove('hidden');
+    messagesContainer.classList.remove('active');
+  }
 
   // ═══════════════════════════════════════════════
   //  STATUS
@@ -97,6 +322,20 @@ document.addEventListener('DOMContentLoaded', () => {
   async function sendMessage() {
     const text = inputEl.value.trim();
     if (!text || isSending) return;
+
+    // Auto-create session if none exists
+    if (!sessionId && currentUser) {
+      try {
+        const res = await fetch('/api/sessions', { method: 'POST' });
+        const data = await res.json();
+        if (data.session) {
+          sessionId = data.session.id;
+          loadSessions(); // Refresh sidebar
+        }
+      } catch (err) {
+        console.error('Failed to auto-create session', err);
+      }
+    }
 
     isSending = true;
     hideCommandPopup();
@@ -149,11 +388,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /** Create a user message row */
-  function appendUserMessage(text) {
+  function appendUserMessage(text, timestamp = null, prepend = false) {
     const row = document.createElement('div');
     row.classList.add('message-row', 'user');
 
-    const time = formatTime(new Date());
+    const time = formatTime(timestamp || new Date());
 
     row.innerHTML = `
       <div class="msg-avatar user">👤</div>
@@ -163,16 +402,20 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
 
-    messagesContainer.appendChild(row);
-    scrollToBottom();
+    if (prepend) {
+      messagesContainer.prepend(row);
+    } else {
+      messagesContainer.appendChild(row);
+      scrollToBottom();
+    }
   }
 
-  /** Create a Jarvis / system / error message with streaming effect */
-  async function appendAIMessage(text, type = 'jarvis', rawData = null) {
+  /** Create a Jarvis / system / error message with optional streaming effect */
+  async function appendAIMessage(text, type = 'jarvis', rawData = null, stream = true, timestamp = null, prepend = false) {
     const row = document.createElement('div');
     row.classList.add('message-row', type);
 
-    const time = formatTime(new Date());
+    const time = formatTime(timestamp || new Date());
     const avatarEmoji = type === 'error' ? '⚠️' : type === 'system' ? 'ℹ️' : '⚡';
     const avatarClass = type === 'jarvis' ? 'jarvis' : type;
 
@@ -190,15 +433,20 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
 
     const bubble = row.querySelector('.msg-bubble');
-    messagesContainer.appendChild(row);
+
+    if (prepend) {
+      messagesContainer.prepend(row);
+    } else {
+      messagesContainer.appendChild(row);
+    }
 
     // Set up action buttons
     row.querySelectorAll('.msg-action-btn').forEach((btn) => {
       btn.addEventListener('click', () => handleMessageAction(btn, text));
     });
 
-    // Streaming effect for Jarvis messages
-    if (type === 'jarvis') {
+    // Streaming effect for live Jarvis messages only (not history replay)
+    if (type === 'jarvis' && stream && !prepend) {
       await streamContent(bubble, text);
     } else {
       bubble.innerHTML = renderMarkdown(text);
@@ -212,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
       appendReviewButton(row, rawData);
     }
 
-    scrollToBottom();
+    if (!prepend) scrollToBottom();
   }
 
   function appendReviewButton(row, data) {

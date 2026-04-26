@@ -7,7 +7,6 @@ import { commandRegistry } from '../commands/registry.js';
 import { CommandName } from '../enums/commandEnum.js';
 import { SYSTEM_PROMPT } from '../constants/chatConstants.js';
 import { ChatResult } from '../types/chatTypes.js';
-import { CommandResult } from '../types/commandTypes.js';
 
 const log = createChildLogger('chatService');
 
@@ -23,15 +22,15 @@ export async function handleChatMessage(
 ): Promise<ChatResult> {
   const traceLog = queryId ? withQueryId(log, queryId) : log;
   const startTime = Date.now();
-  traceLog.info('handleChatMessage entry', { 
+  traceLog.info('handleChatMessage entry', {
     source: 'chatService#handleChatMessage',
-    sessionId, 
-    message 
+    sessionId,
+    message
   });
 
   try {
     const parsed = parseUserInput(message, queryId);
-    traceLog.debug('Message parse result', { 
+    traceLog.debug('Message parse result', {
       source: 'chatService#handleChatMessage',
       isCommand: parsed.isCommand,
       command: parsed.command,
@@ -43,12 +42,12 @@ export async function handleChatMessage(
       const handler = commandRegistry.get(parsed.command as CommandName);
 
       if (handler) {
-        traceLog.info(`Executing command: ${parsed.command}`, { 
+        traceLog.info(`Executing command: ${parsed.command}`, {
           source: 'chatService#handleChatMessage',
-          sessionId 
+          sessionId
         });
         const result = await handler.execute(parsed.args, sessionId);
-        
+
         traceLog.info('Command execution complete', {
           source: 'chatService#handleChatMessage',
           success: result.success,
@@ -59,8 +58,8 @@ export async function handleChatMessage(
         // so the frontend applies streaming Markdown. Failures use 'system'.
         const responseType = result.success ? 'ai' : 'system';
         const typedData = result.data as Record<string, any> | undefined;
-        return { 
-          type: responseType, 
+        return {
+          type: responseType,
           content: result.message,
           changeSetId: typedData?.changeSetId,
           changesSummary: typedData?.changesSummary
@@ -75,7 +74,7 @@ export async function handleChatMessage(
     }
 
     // ── AI branch ──
-    traceLog.info('Invoking LLM for chat response', { 
+    traceLog.info('Invoking LLM for chat response', {
       source: 'chatService#handleChatMessage',
       sessionId,
       provider: config.llm.provider,
@@ -89,7 +88,7 @@ export async function handleChatMessage(
       new SystemMessage(SYSTEM_PROMPT),
       new HumanMessage(message),
     ]);
-    
+
     traceLog.debug('LLM response received', {
       source: 'chatService#handleChatMessage',
       llmDurationMs: Date.now() - llmStartTime,
@@ -108,16 +107,18 @@ export async function handleChatMessage(
     });
 
     return { type: 'ai', content };
-  } catch (error: any) {
-    traceLog.error('Chat service error', { 
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    traceLog.error('Chat service error', {
       source: 'chatService#handleChatMessage',
-      error: error.message, 
-      stack: error.stack,
-      sessionId 
+      error: message,
+      stack,
+      sessionId
     });
     return {
       type: 'error',
-      content: `Sorry, I encountered an error: ${error.message}`,
+      content: `Sorry, I encountered an error: ${message}`,
     };
   }
 }

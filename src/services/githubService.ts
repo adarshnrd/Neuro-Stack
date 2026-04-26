@@ -50,9 +50,11 @@ export class GitHubService {
         number: data.number,
         url: data.html_url,
       };
-    } catch (error: any) {
-      log.error('Failed to create PR', { source: 'githubService#createPullRequest', error: error.message });
-      throw new GitHubApiError('createPR', error.message, error.status, { head, base });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to create PR', { source: 'githubService#createPullRequest', error: message });
+      throw new GitHubApiError('createPR', message, status, { head, base });
     }
   }
 
@@ -67,9 +69,11 @@ export class GitHubService {
       });
       log.debug('Pull request fetched successfully', { source: 'githubService#getPullRequest', durationMs: Date.now() - startTime });
       return data;
-    } catch (error: any) {
-      log.error('Failed to get PR', { source: 'githubService#getPullRequest', error: error.message });
-      throw new GitHubApiError('getPR', error.message, error.status, { prNumber });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to get PR', { source: 'githubService#getPullRequest', error: message });
+      throw new GitHubApiError('getPR', message, status, { prNumber });
     }
   }
 
@@ -88,9 +92,11 @@ export class GitHubService {
       const diffStr = data as unknown as string;
       log.debug('PR diff fetched successfully', { source: 'githubService#getPullRequestDiff', diffLength: diffStr.length, durationMs: Date.now() - startTime });
       return diffStr;
-    } catch (error: any) {
-      log.error('Failed to get PR diff', { source: 'githubService#getPullRequestDiff', error: error.message });
-      throw new GitHubApiError('getPRDiff', error.message, error.status, { prNumber });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to get PR diff', { source: 'githubService#getPullRequestDiff', error: message });
+      throw new GitHubApiError('getPRDiff', message, status, { prNumber });
     }
   }
 
@@ -106,9 +112,11 @@ export class GitHubService {
         event, // APPROVE, REQUEST_CHANGES, COMMENT
       });
       log.debug('PR review submitted successfully', { source: 'githubService#submitReview', durationMs: Date.now() - startTime });
-    } catch (error: any) {
-      log.error('Failed to submit review', { source: 'githubService#submitReview', error: error.message });
-      throw new GitHubApiError('submitReview', error.message, error.status, { prNumber, event });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to submit review', { source: 'githubService#submitReview', error: message });
+      throw new GitHubApiError('submitReview', message, status, { prNumber, event });
     }
   }
 
@@ -123,9 +131,11 @@ export class GitHubService {
         merge_method: method,
       });
       log.debug('PR merged successfully', { source: 'githubService#mergePullRequest', durationMs: Date.now() - startTime });
-    } catch (error: any) {
-      log.error('Failed to merge PR', { source: 'githubService#mergePullRequest', error: error.message });
-      throw new GitHubApiError('mergePR', error.message, error.status, { prNumber, method });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to merge PR', { source: 'githubService#mergePullRequest', error: message });
+      throw new GitHubApiError('mergePR', message, status, { prNumber, method });
     }
   }
 
@@ -140,9 +150,11 @@ export class GitHubService {
       });
       log.debug('PR list fetched successfully', { source: 'githubService#listPullRequests', count: data.length, durationMs: Date.now() - startTime });
       return data;
-    } catch (error: any) {
-      log.error('Failed to list PRs', { source: 'githubService#listPullRequests', error: error.message });
-      throw new GitHubApiError('listPRs', error.message, error.status, { state });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      log.error('Failed to list PRs', { source: 'githubService#listPullRequests', error: message });
+      throw new GitHubApiError('listPRs', message, status, { state });
     }
   }
 }

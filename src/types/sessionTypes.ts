@@ -18,3 +18,13 @@ export interface Session {
   currentState: string;
   learned: string[];
 }
+
+export interface SessionRecord {
+  id: string;
+  userId: string;
+  title: string | null;
+  isActive: boolean;
+  status: string;
+  createdAt: string;
+  lastActiveAt: string;
+}

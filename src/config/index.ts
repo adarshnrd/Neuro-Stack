@@ -37,6 +37,9 @@ const envSchema = z.object({
   ARCHIVE_RETENTION_DAYS: z.string().transform(Number).default(ARCHIVE_RETENTION_DAYS.toString()),
 
   LOG_LEVEL: z.string().default('info'),
+
+  SUPA_BASE_PROJECT_URL: z.string().min(1),
+  SUPA_BASE_DB_API_KEY: z.string().min(1),
 });
 
 const parsedEnv = envSchema.parse(process.env);
@@ -86,5 +89,9 @@ export const config: AppConfig = {
   },
   log: {
     level: parsedEnv.LOG_LEVEL,
+  },
+  database: {
+    projectUrl: parsedEnv.SUPA_BASE_PROJECT_URL,
+    apiKey: parsedEnv.SUPA_BASE_DB_API_KEY,
   },
 };

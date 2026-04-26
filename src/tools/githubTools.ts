@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { GitHubService } from '../services/githubService.js';
 import { ReviewEvent, MergeMethod, PRState } from '../enums/gitEnum.js';
 import { createChildLogger } from '../logger/index.js';
+import { GitHubPullRequest } from '../types/index.js';
 
 const log = createChildLogger('githubTools');
 const githubService = new GitHubService();
@@ -93,7 +94,7 @@ export const listPullRequests = tool(
   async ({ state }) => {
     log.info('Tool executed: List Pull Requests', { source: 'githubTools#listPullRequests', state });
     const prs = await githubService.listPullRequests((state as PRState) || PRState.OPEN);
-    return JSON.stringify(prs.map((pr: any) => ({
+    return JSON.stringify(prs.map((pr: any): GitHubPullRequest => ({
       number: pr.number,
       title: pr.title,
       state: pr.state,

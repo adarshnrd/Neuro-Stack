@@ -17,6 +17,8 @@
     "@langchain/langgraph": "^1.2.6",
     "@octokit/auth-app": "^7.1.4",
     "@octokit/rest": "^21.0.2",
+    "@supabase/supabase-js": "^2.104.1",
+    "bcrypt": "^6.0.0",
     "diff": "^9.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -29,6 +31,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/diff": "^7.0.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.10",

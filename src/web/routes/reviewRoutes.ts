@@ -20,8 +20,10 @@ router.get('/api/review/:changeSetId', (req, res) => {
     }
 
     res.json(changeSet);
-  } catch (error: any) {
-    log.error('Error fetching changeset', { source: 'reviewRoutes#getChangeSet', error: error.message });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error fetching changeset', { source: 'reviewRoutes#getChangeSet', error: message });
     res.status(500).json({ type: 'error', content: 'Internal server error.' });
   }
 });
@@ -35,8 +37,10 @@ router.get('/api/review/session/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const changeSets = changeSetService.listChangeSets(sessionId);
     res.json({ changeSets });
-  } catch (error: any) {
-    log.error('Error listing session changesets', { source: 'reviewRoutes#listSessionChangeSets', error: error.message });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error listing session changesets', { source: 'reviewRoutes#listSessionChangeSets', error: message });
     res.status(500).json({ type: 'error', content: 'Internal server error.' });
   }
 });
@@ -50,9 +54,11 @@ router.post('/api/review/:changeSetId/accept', async (req, res) => {
     const { changeSetId } = req.params;
     await changeSetService.acceptChangeSet(changeSetId);
     res.json({ status: 'success', message: 'Changes applied.' });
-  } catch (error: any) {
-    log.error('Error accepting changeset', { source: 'reviewRoutes#acceptChangeSet', error: error.message });
-    res.status(500).json({ type: 'error', content: error.message || 'Internal server error.' });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error accepting changeset', { source: 'reviewRoutes#acceptChangeSet', error: message });
+    res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
 });
 
@@ -65,9 +71,11 @@ router.post('/api/review/:changeSetId/reject', async (req, res) => {
     const { changeSetId } = req.params;
     await changeSetService.rejectChangeSet(changeSetId);
     res.json({ status: 'success', message: 'Changes rejected.' });
-  } catch (error: any) {
-    log.error('Error rejecting changeset', { source: 'reviewRoutes#rejectChangeSet', error: error.message });
-    res.status(500).json({ type: 'error', content: error.message || 'Internal server error.' });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error rejecting changeset', { source: 'reviewRoutes#rejectChangeSet', error: message });
+    res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
 });
 
@@ -88,9 +96,11 @@ router.post('/api/review/:changeSetId/comment', async (req, res) => {
 
     const comment = await changeSetService.addComment(changeSetId, fileIndex, lineNumber, content);
     res.json({ status: 'success', comment });
-  } catch (error: any) {
-    log.error('Error adding comment', { source: 'reviewRoutes#addComment', error: error.message });
-    res.status(500).json({ type: 'error', content: error.message || 'Internal server error.' });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error adding comment', { source: 'reviewRoutes#addComment', error: message });
+    res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
 });
 
@@ -115,9 +125,11 @@ router.post('/api/review/:changeSetId/revise', async (req, res) => {
     // await revisionService.processRevision(changeSetId, feedback, req.body.sessionId);
 
     res.json({ status: 'success', message: 'Revision requested.' });
-  } catch (error: any) {
-    log.error('Error requesting revision', { source: 'reviewRoutes#requestRevision', error: error.message });
-    res.status(500).json({ type: 'error', content: error.message || 'Internal server error.' });
+  } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+    log.error('Error requesting revision', { source: 'reviewRoutes#requestRevision', error: message });
+    res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
 });
 
