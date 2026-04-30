@@ -255,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       if (res.ok) {
         closePanel();
-        alert('Revision requested. Jarvis is processing...');
+        alert('Revision requested. NeuroStack is processing...');
       }
     } catch (err) {
       alert('Error requesting revision');

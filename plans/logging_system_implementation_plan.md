@@ -1,6 +1,6 @@
 # Comprehensive Query Lifecycle Logging System
 
-Add detailed, structured logging across every file in Project Jarvis to trace the full lifecycle of each user query — from HTTP request entry to response — with correlation IDs for end-to-end traceability.
+Add detailed, structured logging across every file in Project NeuroStack to trace the full lifecycle of each user query — from HTTP request entry to response — with correlation IDs for end-to-end traceability.
 
 ## User Review Required
 
@@ -21,7 +21,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Logger Enhancement
 
-#### [MODIFY] [index.ts](file:///Users/mindpath/Project%20Jarvis/src/logger/index.ts)
+#### [MODIFY] [index.ts](file:///Users/mindpath/Project%20NeuroStack/src/logger/index.ts)
 
 - Add a `createChildLogger(module: string)` factory that wraps the Winston logger to auto-inject a `module` field into every log line
 - Add a `withQueryId(queryId: string)` helper that returns a logger with `queryId` baked into all metadata
@@ -33,7 +33,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### API Layer (Entry/Exit Point)
 
-#### [MODIFY] [apiRoutes.ts](file:///Users/mindpath/Project%20Jarvis/src/web/routes/apiRoutes.ts)
+#### [MODIFY] [apiRoutes.ts](file:///Users/mindpath/Project%20NeuroStack/src/web/routes/apiRoutes.ts)
 
 - Generate `queryId` (UUID) at request entry for `/api/chat`
 - Log: request received with `queryId`, `sessionId`, message length, content-type
@@ -42,7 +42,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 - Log: unhandled errors with full stack trace and `queryId`
 - Pass `queryId` downstream to `handleChatMessage`
 
-#### [MODIFY] [viewRoutes.ts](file:///Users/mindpath/Project%20Jarvis/src/web/routes/viewRoutes.ts)
+#### [MODIFY] [viewRoutes.ts](file:///Users/mindpath/Project%20NeuroStack/src/web/routes/viewRoutes.ts)
 
 - Log: view render requests with path info
 
@@ -50,7 +50,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Chat Service (Core Orchestrator)
 
-#### [MODIFY] [chatService.ts](file:///Users/mindpath/Project%20Jarvis/src/services/chatService.ts)
+#### [MODIFY] [chatService.ts](file:///Users/mindpath/Project%20NeuroStack/src/services/chatService.ts)
 
 - Accept `queryId` parameter
 - Log: entry with `queryId`, raw message (truncated for debug)
@@ -67,20 +67,20 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Command System
 
-#### [MODIFY] [parser.ts](file:///Users/mindpath/Project%20Jarvis/src/commands/parser.ts)
+#### [MODIFY] [parser.ts](file:///Users/mindpath/Project%20NeuroStack/src/commands/parser.ts)
 
 - Log: input received for parsing (debug)
 - Log: detected command vs plain message
 - Log: parsed command name, extracted args (prNumber, method flags)
 - Log: unrecognized @ mention vs valid command
 
-#### [MODIFY] [registry.ts](file:///Users/mindpath/Project%20Jarvis/src/commands/registry.ts)
+#### [MODIFY] [registry.ts](file:///Users/mindpath/Project%20NeuroStack/src/commands/registry.ts)
 
 - Log: handler registration at startup
 - Log: handler lookup (hit/miss)
 - Log: listing all registered commands
 
-#### [MODIFY] [newSessionHandler.ts](file:///Users/mindpath/Project%20Jarvis/src/commands/handlers/newSessionHandler.ts)
+#### [MODIFY] [newSessionHandler.ts](file:///Users/mindpath/Project%20NeuroStack/src/commands/handlers/newSessionHandler.ts)
 
 - Log: handler entry with sessionId and args
 - Log: archive of old session
@@ -91,12 +91,12 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### LLM Layer
 
-#### [MODIFY] [provider.ts](file:///Users/mindpath/Project%20Jarvis/src/llm/provider.ts)
+#### [MODIFY] [provider.ts](file:///Users/mindpath/Project%20NeuroStack/src/llm/provider.ts)
 
 - Log: provider selection (which provider, which model)
 - Log: fallback to default provider
 
-#### [MODIFY] [geminiProvider.ts](file:///Users/mindpath/Project%20Jarvis/src/llm/providers/geminiProvider.ts)
+#### [MODIFY] [geminiProvider.ts](file:///Users/mindpath/Project%20NeuroStack/src/llm/providers/geminiProvider.ts)
 
 - Log: Gemini provider instantiation with model name
 - Log: API key presence check (not the key itself)
@@ -105,14 +105,14 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Graph / Workflow Layer
 
-#### [MODIFY] [workflow.ts](file:///Users/mindpath/Project%20Jarvis/src/graph/workflow.ts)
+#### [MODIFY] [workflow.ts](file:///Users/mindpath/Project%20NeuroStack/src/graph/workflow.ts)
 
 - Log: each node entry/exit with node name
 - Log: state mutations (what keys changed)
 - Log: execution log accumulation
 - Log: graph compilation
 
-#### [MODIFY] [state.ts](file:///Users/mindpath/Project%20Jarvis/src/graph/state.ts)
+#### [MODIFY] [state.ts](file:///Users/mindpath/Project%20NeuroStack/src/graph/state.ts)
 
 - No changes needed (pure type definitions)
 
@@ -120,7 +120,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Memory Layer
 
-#### [MODIFY] [contextLoader.ts](file:///Users/mindpath/Project%20Jarvis/src/memory/contextLoader.ts)
+#### [MODIFY] [contextLoader.ts](file:///Users/mindpath/Project%20NeuroStack/src/memory/contextLoader.ts)
 
 - Log: each file load attempt (path, exists/not, size)
 - Log: rules assembly (how many sections loaded)
@@ -128,20 +128,20 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 - Log: session context load result
 - Log: learned patterns load result
 
-#### [MODIFY] [contextWriter.ts](file:///Users/mindpath/Project%20Jarvis/src/memory/contextWriter.ts)
+#### [MODIFY] [contextWriter.ts](file:///Users/mindpath/Project%20NeuroStack/src/memory/contextWriter.ts)
 
 - Log: file append operations (target path, content length)
 - Log: directory creation if needed
 - Log: rule append (type: system vs anti_hallucination)
 - Log: learned pattern append
 
-#### [MODIFY] [promptInjector.ts](file:///Users/mindpath/Project%20Jarvis/src/memory/promptInjector.ts)
+#### [MODIFY] [promptInjector.ts](file:///Users/mindpath/Project%20NeuroStack/src/memory/promptInjector.ts)
 
 - Log: prompt assembly start
 - Log: each context section inclusion (present/absent, length)
 - Log: total assembled prompt message count and length
 
-#### [MODIFY] [sessionManager.ts](file:///Users/mindpath/Project%20Jarvis/src/memory/sessionManager.ts)
+#### [MODIFY] [sessionManager.ts](file:///Users/mindpath/Project%20NeuroStack/src/memory/sessionManager.ts)
 
 - Log: session create (new ID, expiry)
 - Log: session read (found/not found)
@@ -150,7 +150,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 - Log: session archive (source/destination paths)
 - Log: session purge (which files deleted)
 
-#### [MODIFY] [archiveManager.ts](file:///Users/mindpath/Project%20Jarvis/src/memory/archiveManager.ts)
+#### [MODIFY] [archiveManager.ts](file:///Users/mindpath/Project%20NeuroStack/src/memory/archiveManager.ts)
 
 - Log: cleanup start with archive path
 - Log: each file evaluated (age, decision: keep/delete)
@@ -161,26 +161,26 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Services Layer
 
-#### [MODIFY] [contextService.ts](file:///Users/mindpath/Project%20Jarvis/src/services/contextService.ts)
+#### [MODIFY] [contextService.ts](file:///Users/mindpath/Project%20NeuroStack/src/services/contextService.ts)
 
 - Log: `loadForCommand` entry (command, sessionId)
 - Log: assembled context sections (which ones present, lengths)
 - Log: learning append
 - Log: anti-hallucination rule append
 
-#### [MODIFY] [sessionService.ts](file:///Users/mindpath/Project%20Jarvis/src/services/sessionService.ts)
+#### [MODIFY] [sessionService.ts](file:///Users/mindpath/Project%20NeuroStack/src/services/sessionService.ts)
 
 - Enhance existing logs with more detail (session IDs, status transitions)
 - Log: `addLearningToSession` (session found/not, learning content)
 - Log: auto-cleanup results
 
-#### [MODIFY] [gitService.ts](file:///Users/mindpath/Project%20Jarvis/src/services/gitService.ts)
+#### [MODIFY] [gitService.ts](file:///Users/mindpath/Project%20NeuroStack/src/services/gitService.ts)
 
 - Add `debug` logs for operation start/completion timing
 - Add success logs after each operation completes
 - Log: workspace init, repo check
 
-#### [MODIFY] [githubService.ts](file:///Users/mindpath/Project%20Jarvis/src/services/githubService.ts)
+#### [MODIFY] [githubService.ts](file:///Users/mindpath/Project%20NeuroStack/src/services/githubService.ts)
 
 - Add `debug` logs for API call timing
 - Add success logs with returned data summaries (PR number, URL)
@@ -190,18 +190,18 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Tools Layer (LangChain Tools)
 
-#### [MODIFY] [fileTools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/fileTools.ts)
+#### [MODIFY] [fileTools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/fileTools.ts)
 
 - Log: each tool invocation (tool name, input params)
 - Log: tool result (success/failure, output summary)
 - Log: file not found cases
 
-#### [MODIFY] [gitTools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/gitTools.ts)
+#### [MODIFY] [gitTools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/gitTools.ts)
 
 - Log: each tool invocation with params
 - Log: tool completion with result summary
 
-#### [MODIFY] [githubTools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/githubTools.ts)
+#### [MODIFY] [githubTools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/githubTools.ts)
 
 - Log: each tool invocation with params
 - Log: tool completion with result summary
@@ -210,12 +210,12 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Utilities
 
-#### [MODIFY] [fileUtil.ts](file:///Users/mindpath/Project%20Jarvis/src/utils/fileUtil.ts)
+#### [MODIFY] [fileUtil.ts](file:///Users/mindpath/Project%20NeuroStack/src/utils/fileUtil.ts)
 
 - Log: `debug` for file existence checks, directory creation, JSON read/write
 - These are high-frequency calls so only at `debug` level
 
-#### [MODIFY] [validationUtil.ts](file:///Users/mindpath/Project%20Jarvis/src/utils/validationUtil.ts)
+#### [MODIFY] [validationUtil.ts](file:///Users/mindpath/Project%20NeuroStack/src/utils/validationUtil.ts)
 
 - Log: validation attempts and failures
 
@@ -223,7 +223,7 @@ Add detailed, structured logging across every file in Project Jarvis to trace th
 
 ### Entry Point
 
-#### [MODIFY] [index.ts](file:///Users/mindpath/Project%20Jarvis/src/index.ts)
+#### [MODIFY] [index.ts](file:///Users/mindpath/Project%20NeuroStack/src/index.ts)
 
 - Log: startup config summary (port, LLM provider, log level — no secrets)
 - Log: command handler registration details

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Jarvis — Login</title>
+  <title>NeuroStack — Login</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -152,7 +152,7 @@
   <div class="login-container">
     <div class="login-header">
       <div class="logo">⚡</div>
-      <h1>Project Jarvis</h1>
+      <h1>Project NeuroStack</h1>
       <p>AI-Powered Git Workflow Assistant</p>
     </div>
 
@@ -235,7 +235,7 @@
         if (data.success) {
           feedback.textContent = 'Login successful! Redirecting...';
           feedback.className = 'success-msg';
-          setTimeout(() => { window.location.href = '/'; }, 500);
+          setTimeout(() => { window.location.href = '/app'; }, 500);
         } else {
           feedback.textContent = data.message || 'Login failed.';
           feedback.className = 'error-msg';
@@ -269,7 +269,7 @@
         if (data.success) {
           feedback.textContent = 'Account created! Redirecting...';
           feedback.className = 'success-msg';
-          setTimeout(() => { window.location.href = '/'; }, 500);
+          setTimeout(() => { window.location.href = '/app'; }, 500);
         } else {
           feedback.textContent = data.message || 'Registration failed.';
           feedback.className = 'error-msg';
@@ -281,6 +281,13 @@
         btn.disabled = false;
       }
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const isSignup = {{#if isSignup}}true{{else}}false{{/if}};
+      if (isSignup) {
+        switchTab('register');
+      }
+    });
   </script>
 </body>
 </html>

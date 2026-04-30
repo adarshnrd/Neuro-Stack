@@ -1,5 +1,5 @@
 {
-  "name": "project-jarvis",
+  "name": "project-neurostack",
   "version": "1.0.0",
   "description": "AI-Powered Git Workflow Assistant built with Node.js, LangChain, LangGraph, and Google Gemini.",
   "type": "module",

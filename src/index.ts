@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 const log = createChildLogger('bootstrap');
 
 async function bootstrap() {
-  log.info('Starting Project Jarvis...', { source: 'index#bootstrap', env: config.server.host });
+  log.info('Starting Project NeuroStack...', { source: 'index#bootstrap', env: config.server.host });
 
   // Verify Supabase connection
   const dbOk = await checkSupabaseConnection();

@@ -26,7 +26,7 @@ router.post('/api/auth/register', async (req, res) => {
     const result = await registerUser(username, password);
 
     if (result.success && result.token) {
-      res.setHeader('Set-Cookie', `jarvis_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
+      res.setHeader('Set-Cookie', `neurostack_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
     }
 
     const status = result.success ? 201 : 409;
@@ -54,7 +54,7 @@ router.post('/api/auth/login', async (req, res) => {
     const result = await loginUser(username, password);
 
     if (result.success && result.token) {
-      res.setHeader('Set-Cookie', `jarvis_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
+      res.setHeader('Set-Cookie', `neurostack_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
     }
 
     const status = result.success ? 200 : 401;
@@ -70,7 +70,7 @@ router.post('/api/auth/login', async (req, res) => {
  * POST /api/auth/logout
  */
 router.post('/api/auth/logout', (_req, res) => {
-  res.setHeader('Set-Cookie', 'jarvis_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+  res.setHeader('Set-Cookie', 'neurostack_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
   res.json({ success: true, message: 'Logged out.' });
 });
 
@@ -81,7 +81,7 @@ router.post('/api/auth/logout', (_req, res) => {
 router.get('/api/auth/me', async (req, res) => {
   try {
     const token =
-      (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('jarvis_token='))
+      (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('neurostack_token='))
         ?.split('=')[1]?.trim()) ||
       req.headers.authorization?.replace('Bearer ', '');
 

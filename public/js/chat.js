@@ -1,5 +1,5 @@
 /**
- * Project Jarvis — Chat Client
+ * Project NeuroStack — Chat Client
  * Premium chat UI with markdown rendering, streaming effect,
  * code copy buttons, message actions, and @ command autocomplete.
  *
@@ -133,7 +133,14 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/sessions');
       const data = await res.json();
-      renderSessionList(data.sessions || []);
+      const sessions = data.sessions || [];
+      renderSessionList(sessions);
+      
+      if (!sessionId && sessions.length > 0) {
+        await switchSession(sessions[0].id);
+      } else if (!sessionId) {
+        showWelcomeScreen();
+      }
     } catch (err) {
       console.error('Failed to load sessions', err);
     }
@@ -280,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
       appendUserMessage(msg.content, new Date(msg.createdAt), prepend);
     } else {
       const type = msg.responseType === 'error' ? 'error'
-        : msg.responseType === 'system' ? 'system' : 'jarvis';
+        : msg.responseType === 'system' ? 'system' : 'neurostack';
       appendAIMessage(msg.content, type, msg.metadata, false, new Date(msg.createdAt), prepend);
     }
   }
@@ -364,10 +371,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       removeTypingIndicator(typingRow);
 
-      const type = data.type === 'error' ? 'error' : data.type === 'system' ? 'system' : 'jarvis';
+      const type = data.type === 'error' ? 'error' : data.type === 'system' ? 'system' : 'neurostack';
       await appendAIMessage(data.content, type, data);
 
       setStatus('ready', 'Ready');
+      
+      // Refresh session list to show new title or latest timestamp
+      loadSessions();
     } catch (err) {
       removeTypingIndicator(typingRow);
       await appendAIMessage('Failed to reach the server. Please try again.', 'error');
@@ -410,14 +420,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /** Create a Jarvis / system / error message with optional streaming effect */
-  async function appendAIMessage(text, type = 'jarvis', rawData = null, stream = true, timestamp = null, prepend = false) {
+  /** Create a NeuroStack / system / error message with optional streaming effect */
+  async function appendAIMessage(text, type = 'neurostack', rawData = null, stream = true, timestamp = null, prepend = false) {
     const row = document.createElement('div');
     row.classList.add('message-row', type);
 
     const time = formatTime(timestamp || new Date());
     const avatarEmoji = type === 'error' ? '⚠️' : type === 'system' ? 'ℹ️' : '⚡';
-    const avatarClass = type === 'jarvis' ? 'jarvis' : type;
+    const avatarClass = type === 'neurostack' ? 'neurostack' : type;
 
     row.innerHTML = `
       <div class="msg-avatar ${avatarClass}">${avatarEmoji}</div>
@@ -445,8 +455,8 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.addEventListener('click', () => handleMessageAction(btn, text));
     });
 
-    // Streaming effect for live Jarvis messages only (not history replay)
-    if (type === 'jarvis' && stream && !prepend) {
+    // Streaming effect for live NeuroStack messages only (not history replay)
+    if (type === 'neurostack' && stream && !prepend) {
       await streamContent(bubble, text);
     } else {
       bubble.innerHTML = renderMarkdown(text);
@@ -620,10 +630,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showTypingIndicator() {
     const row = document.createElement('div');
-    row.classList.add('message-row', 'jarvis', 'typing-row');
+    row.classList.add('message-row', 'neurostack', 'typing-row');
 
     row.innerHTML = `
-      <div class="msg-avatar jarvis">⚡</div>
+      <div class="msg-avatar neurostack">⚡</div>
       <div class="msg-content">
         <div class="msg-bubble typing-indicator">
           <span></span><span></span><span></span>

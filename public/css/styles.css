@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════
-   Project Jarvis — Premium Chat UI
+   Project NeuroStack — Premium Chat UI
    ═══════════════════════════════════════════════════ */
 
 /* ── Design Tokens ── */
@@ -41,8 +41,8 @@
   /* Messages */
   --user-msg-bg: var(--accent);
   --user-msg-text: #fff;
-  --jarvis-msg-bg: var(--bg-surface);
-  --jarvis-msg-text: var(--text-primary);
+  --neurostack-msg-bg: var(--bg-surface);
+  --neurostack-msg-text: var(--text-primary);
   --system-msg-bg: rgba(59, 130, 246, 0.08);
   --error-msg-bg: rgba(239, 68, 68, 0.08);
 
@@ -442,7 +442,7 @@ body {
   margin-top: 2px;
 }
 
-.msg-avatar.jarvis {
+.msg-avatar.neurostack {
   background: linear-gradient(135deg, var(--accent), #a78bfa);
   color: #fff;
   font-weight: 700;
@@ -474,10 +474,10 @@ body {
   border-bottom-right-radius: var(--radius-sm);
 }
 
-/* Jarvis bubble */
-.message-row.jarvis .msg-bubble {
-  background: var(--jarvis-msg-bg);
-  color: var(--jarvis-msg-text);
+/* NeuroStack bubble */
+.message-row.neurostack .msg-bubble {
+  background: var(--neurostack-msg-bg);
+  color: var(--neurostack-msg-text);
   border: 1px solid var(--border-subtle);
   border-bottom-left-radius: var(--radius-sm);
 }
@@ -591,7 +591,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════
-   MARKDOWN CONTENT (Inside Jarvis bubbles)
+   MARKDOWN CONTENT (Inside NeuroStack bubbles)
    ══════════════════════════════════════════════════ */
 
 .msg-bubble > *:first-child {

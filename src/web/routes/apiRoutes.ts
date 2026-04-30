@@ -46,7 +46,16 @@ router.post('/api/chat', async (req, res) => {
       return;
     }
 
-    const sid = sessionId || uuidv4();
+    let sid = sessionId;
+    if (!sid) {
+      if (req.userId) {
+        const newSession = await createDbSession(req.userId);
+        sid = newSession.id;
+      } else {
+        sid = uuidv4();
+      }
+    }
+
     traceLog.info('Chat request received', { 
       source: 'apiRoutes#postChat',
       sessionId: sid, 
@@ -67,13 +76,13 @@ router.post('/api/chat', async (req, res) => {
 
     // ── NEW: Persist conversation exchange (non-blocking) ──────────────────────
     const userId = req.userId;
-    if (userId && sessionId) {
+    if (userId && sid) {
       // Determine if this is the first message in the session
-      const msgCount = await getConversationCount(sessionId);
+      const msgCount = await getConversationCount(sid);
       const isFirst = msgCount === 0;
 
       // Fire-and-forget: don't await this to avoid slowing the response
-      recordExchange(sessionId, userId, message, result, isFirst).catch((err) => {
+      recordExchange(sid, userId, message, result, isFirst).catch((err) => {
         traceLog.error('Background persist failed', {
           source: 'apiRoutes#postChat',
           error: err instanceof Error ? err.message : String(err),
@@ -81,7 +90,7 @@ router.post('/api/chat', async (req, res) => {
       });
 
       // Touch session timestamp
-      touchSession(sessionId).catch(() => { /* silent */ });
+      touchSession(sid).catch(() => { /* silent */ });
     }
 
     res.json({ ...result, sessionId: sid });

@@ -1,4 +1,4 @@
-# Project Jarvis — AI Git Workflow Assistant
+# Project NeuroStack — AI Git Workflow Assistant
 
 > An intelligent, Git-integrated development workflow system using **Node.js**, **LangChain**, **LangGraph**, and **Google Gemini**.
 
@@ -100,7 +100,7 @@ graph TB
 ## Directory Structure
 
 ```
-Project Jarvis/
+Project NeuroStack/
 ├── src/
 │   ├── index.ts                            # Application entry point
 │   │
@@ -256,13 +256,13 @@ Project Jarvis/
 ## Proposed Changes — Component Details
 
 > [!IMPORTANT]
-> **Code Quality Contract**: All generated code must follow the standards defined in [code_generation_guidelines.md](file:///Users/mindpath/Project%20Jarvis/context/agents/code_generation_guidelines.md). This file is loaded into every LLM call to ensure consistent, production-grade output.
+> **Code Quality Contract**: All generated code must follow the standards defined in [code_generation_guidelines.md](file:///Users/mindpath/Project%20NeuroStack/context/agents/code_generation_guidelines.md). This file is loaded into every LLM call to ensure consistent, production-grade output.
 
 ---
 
 ### 1. Types & Enums (Separate Directories)
 
-#### [NEW] [types/](file:///Users/mindpath/Project%20Jarvis/src/types/)
+#### [NEW] [types/](file:///Users/mindpath/Project%20NeuroStack/src/types/)
 
 All data structures defined as TypeScript interfaces, grouped by domain:
 
@@ -318,7 +318,7 @@ export interface Session {
 }
 ```
 
-#### [NEW] [enums/](file:///Users/mindpath/Project%20Jarvis/src/enums/)
+#### [NEW] [enums/](file:///Users/mindpath/Project%20NeuroStack/src/enums/)
 
 All enums grouped by domain:
 
@@ -355,7 +355,7 @@ export enum LLMProvider { GEMINI = 'gemini', OPENAI = 'openai', ANTHROPIC = 'ant
 
 ### 2. Custom Error Classes
 
-#### [NEW] [errors/](file:///Users/mindpath/Project%20Jarvis/src/errors/)
+#### [NEW] [errors/](file:///Users/mindpath/Project%20NeuroStack/src/errors/)
 
 Hierarchical error system:
 
@@ -394,14 +394,14 @@ export class ValidationError extends BaseAppError {
 
 ### 3. Config System
 
-#### [NEW] [config/index.ts](file:///Users/mindpath/Project%20Jarvis/src/config/index.ts)
+#### [NEW] [config/index.ts](file:///Users/mindpath/Project%20NeuroStack/src/config/index.ts)
 
 - Loads `.env` via `dotenv`
 - Validates all required keys using Zod schemas
 - Auto-detects GitHub auth mode: PAT if `GITHUB_TOKEN` present, App if `GITHUB_APP_ID` + `GITHUB_PRIVATE_KEY_PATH` + `GITHUB_INSTALLATION_ID` present
 - Exports frozen `AppConfig` singleton
 
-#### [NEW] [config/constants.ts](file:///Users/mindpath/Project%20Jarvis/src/config/constants.ts)
+#### [NEW] [config/constants.ts](file:///Users/mindpath/Project%20NeuroStack/src/config/constants.ts)
 
 ```ts
 export const SESSION_ACTIVE_WINDOW_HOURS = 5;
@@ -416,7 +416,7 @@ export const LEARNED_PATTERNS_MAX_ENTRIES = 200;
 
 ### 4. LLM Abstraction Layer
 
-#### [NEW] [llm/provider.ts](file:///Users/mindpath/Project%20Jarvis/src/llm/provider.ts)
+#### [NEW] [llm/provider.ts](file:///Users/mindpath/Project%20NeuroStack/src/llm/provider.ts)
 
 Factory returning `BaseChatModel`:
 
@@ -437,7 +437,7 @@ export function createLLMProvider(config: LLMConfig): BaseChatModel {
 
 ### 5. Command System
 
-#### [NEW] [commands/parser.ts](file:///Users/mindpath/Project%20Jarvis/src/commands/parser.ts)
+#### [NEW] [commands/parser.ts](file:///Users/mindpath/Project%20NeuroStack/src/commands/parser.ts)
 
 ```ts
 /**
@@ -448,7 +448,7 @@ export function createLLMProvider(config: LLMConfig): BaseChatModel {
 export function parseUserInput(input: string): ParsedCommand
 ```
 
-#### [NEW] [commands/registry.ts](file:///Users/mindpath/Project%20Jarvis/src/commands/registry.ts)
+#### [NEW] [commands/registry.ts](file:///Users/mindpath/Project%20NeuroStack/src/commands/registry.ts)
 
 ```ts
 /**
@@ -480,7 +480,7 @@ export class CommandRegistry {
 
 ### 6. LangGraph Workflow Engine
 
-#### [NEW] [graph/state.ts](file:///Users/mindpath/Project%20Jarvis/src/graph/state.ts)
+#### [NEW] [graph/state.ts](file:///Users/mindpath/Project%20NeuroStack/src/graph/state.ts)
 
 ```ts
 const AgentState = Annotation.Root({
@@ -515,7 +515,7 @@ const AgentState = Annotation.Root({
 });
 ```
 
-#### [NEW] [graph/workflow.ts](file:///Users/mindpath/Project%20Jarvis/src/graph/workflow.ts)
+#### [NEW] [graph/workflow.ts](file:///Users/mindpath/Project%20NeuroStack/src/graph/workflow.ts)
 
 ```mermaid
 stateDiagram-v2
@@ -558,7 +558,7 @@ stateDiagram-v2
 - **Thread-based**: Each session gets a unique `thread_id`
 - **Context injection**: First node always loads agent guidelines + relevant markdown context
 
-#### [NEW] [graph/nodes/*.ts](file:///Users/mindpath/Project%20Jarvis/src/graph/nodes/)
+#### [NEW] [graph/nodes/*.ts](file:///Users/mindpath/Project%20NeuroStack/src/graph/nodes/)
 
 | Node | File | Responsibility |
 |------|------|---------------|
@@ -575,7 +575,7 @@ stateDiagram-v2
 
 ### 7. Services Layer
 
-#### [NEW] [services/](file:///Users/mindpath/Project%20Jarvis/src/services/)
+#### [NEW] [services/](file:///Users/mindpath/Project%20NeuroStack/src/services/)
 
 Business logic separated from tools and handlers:
 
@@ -773,7 +773,7 @@ If learned_patterns.md > 500KB:
 
 ### 10. LangChain Tools
 
-#### [NEW] [tools/git.tools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/git.tools.ts)
+#### [NEW] [tools/git.tools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/git.tools.ts)
 
 LangChain `@tool` wrappers delegating to `GitService`:
 
@@ -782,7 +782,7 @@ cloneRepository, createBranch, checkoutBranch, stageFiles,
 commitChanges, pushBranch, getCurrentBranch, getDiff
 ```
 
-#### [NEW] [tools/github.tools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/github.tools.ts)
+#### [NEW] [tools/github.tools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/github.tools.ts)
 
 LangChain `@tool` wrappers delegating to `GitHubService`:
 
@@ -793,13 +793,13 @@ listPullRequests, submitReview, mergePullRequest
 
 **Merge guard**: `mergePullRequest` tool always requires explicit user confirmation — never called without `@MERGE_PR` command.
 
-#### [NEW] [tools/file.tools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/file.tools.ts)
+#### [NEW] [tools/file.tools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/file.tools.ts)
 
 ```ts
 readFile, writeFile, listDirectory, deleteFile, fileExists
 ```
 
-#### [NEW] [tools/code.tools.ts](file:///Users/mindpath/Project%20Jarvis/src/tools/code.tools.ts)
+#### [NEW] [tools/code.tools.ts](file:///Users/mindpath/Project%20NeuroStack/src/tools/code.tools.ts)
 
 ```ts
 analyzeCodeStructure, findPotentialIssues, suggestFix
@@ -809,7 +809,7 @@ analyzeCodeStructure, findPotentialIssues, suggestFix
 
 ### 11. Logger
 
-#### [NEW] [logger/index.ts](file:///Users/mindpath/Project%20Jarvis/src/logger/index.ts)
+#### [NEW] [logger/index.ts](file:///Users/mindpath/Project%20NeuroStack/src/logger/index.ts)
 
 Winston structured logger:
 
@@ -830,13 +830,13 @@ Winston structured logger:
 
 ### 12. Web Interface
 
-#### [NEW] [web/server.ts](file:///Users/mindpath/Project%20Jarvis/src/web/server.ts)
+#### [NEW] [web/server.ts](file:///Users/mindpath/Project%20NeuroStack/src/web/server.ts)
 
 - Express + Handlebars + WebSocket (`ws`)
 - REST endpoints: `POST /api/chat`, `GET /api/sessions`, `POST /api/sessions/new`
 - Static files from `public/`
 
-#### [NEW] [web/views/index.hbs](file:///Users/mindpath/Project%20Jarvis/src/web/views/index.hbs)
+#### [NEW] [web/views/index.hbs](file:///Users/mindpath/Project%20NeuroStack/src/web/views/index.hbs)
 
 Dark-themed chat interface with:
 - Real-time WebSocket streaming
@@ -846,7 +846,7 @@ Dark-themed chat interface with:
 - Session expiry notifications
 - Typing indicator
 
-#### [NEW] [public/css/styles.css](file:///Users/mindpath/Project%20Jarvis/public/css/styles.css)
+#### [NEW] [public/css/styles.css](file:///Users/mindpath/Project%20NeuroStack/public/css/styles.css)
 
 - CSS custom properties theming
 - Dark mode + glassmorphism
@@ -859,7 +859,7 @@ Dark-themed chat interface with:
 
 ### 13. Entry Point & Configuration
 
-#### [NEW] [.env.example](file:///Users/mindpath/Project%20Jarvis/.env.example)
+#### [NEW] [.env.example](file:///Users/mindpath/Project%20NeuroStack/.env.example)
 
 ```env
 # ──── Server ────
@@ -901,11 +901,11 @@ ARCHIVE_RETENTION_DAYS=30
 LOG_LEVEL=info
 ```
 
-#### [NEW] [package.json](file:///Users/mindpath/Project%20Jarvis/package.json)
+#### [NEW] [package.json](file:///Users/mindpath/Project%20NeuroStack/package.json)
 
 ```json
 {
-  "name": "project-jarvis",
+  "name": "project-neurostack",
   "version": "1.0.0",
   "type": "module",
   "scripts": {

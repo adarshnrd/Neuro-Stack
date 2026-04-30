@@ -1,5 +1,5 @@
 -- ============================================================================
--- Project Jarvis — Initial Database Schema
+-- Project NeuroStack — Initial Database Schema
 -- Run this in Supabase SQL Editor to create all tables
 -- ============================================================================
 

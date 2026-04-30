@@ -1,8 +1,8 @@
-# 🤖 Project Jarvis
+# 🤖 Project NeuroStack
 
 > **AI-Powered Git Workflow Assistant** — An intelligent development assistant built with Node.js, LangChain, LangGraph, and Google Gemini.
 
-Project Jarvis understands your development intent through natural language and structured commands, generates production-ready code, manages Git repositories, and handles the full PR lifecycle — all from a single chat interface.
+Project NeuroStack understands your development intent through natural language and structured commands, generates production-ready code, manages Git repositories, and handles the full PR lifecycle — all from a single chat interface.
 
 ---
 
@@ -68,8 +68,8 @@ Project Jarvis understands your development intent through natural language and 
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/project-jarvis.git
-cd project-jarvis
+git clone https://github.com/your-org/project-neurostack.git
+cd project-neurostack
 
 # 2. Install dependencies
 npm install
@@ -331,7 +331,7 @@ Explain how JWT refresh tokens work.
 ## 📁 Project Structure
 
 ```
-project-jarvis/
+project-neurostack/
 ├── src/                    # Application source code
 │   ├── index.ts            # Entry point
 │   ├── config/             # Configuration & constants
@@ -365,7 +365,7 @@ project-jarvis/
 
 ## 🧠 Context System (Markdown Memory)
 
-Jarvis uses structured Markdown files instead of a database:
+NeuroStack uses structured Markdown files instead of a database:
 
 | Directory | Purpose | Retention |
 |-----------|---------|-----------|

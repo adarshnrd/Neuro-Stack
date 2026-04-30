@@ -15,7 +15,7 @@ Copy and paste the following SQL code into the editor and click **Run**.
 
 ```sql
 -- ============================================================================
--- Project Jarvis — Initial Database Schema
+-- Project NeuroStack — Initial Database Schema
 -- ============================================================================
 
 -- 1. Enable UUID extension (usually enabled by default)

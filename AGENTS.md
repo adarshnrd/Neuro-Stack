@@ -1,8 +1,8 @@
-# AGENTS.md — Project Jarvis Code Standards
+# AGENTS.md — Project NeuroStack Code Standards
 
 ## Project Overview
 
-Project Jarvis is an **AI-powered Git workflow assistant** built on **Express 4**, **TypeScript (strict)**, **LangChain**, **LangGraph**, and **Google Gemini**. It accepts natural language and structured `@commands` via a chat UI (Handlebars + WebSocket), orchestrates multi-step workflows through a stateful LangGraph engine, manages Git operations via `simple-git` and GitHub via `Octokit`, and persists all context and memory as structured Markdown files (no database).
+Project NeuroStack is an **AI-powered Git workflow assistant** built on **Express 4**, **TypeScript (strict)**, **LangChain**, **LangGraph**, and **Google Gemini**. It accepts natural language and structured `@commands` via a chat UI (Handlebars + WebSocket), orchestrates multi-step workflows through a stateful LangGraph engine, manages Git operations via `simple-git` and GitHub via `Octokit`, and persists all context and memory as structured Markdown files (no database).
 
 ---
 

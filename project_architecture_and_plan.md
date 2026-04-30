@@ -1,11 +1,11 @@
-# Project Jarvis Architecture & Flow Plan
+# Project NeuroStack Architecture & Flow Plan
 
-This document outlines the detailed operations and structure of **Project Jarvis**. It explains the core mechanics, how folders structure functionality, how user context is managed, how commands map to logic, and how physical Markdown files feed the AI's internal state.
+This document outlines the detailed operations and structure of **Project NeuroStack**. It explains the core mechanics, how folders structure functionality, how user context is managed, how commands map to logic, and how physical Markdown files feed the AI's internal state.
 
 ---
 
 ## 1. How the System Works
-Project Jarvis acts as an autonomous AI-driven assistant with modular architecture:
+Project NeuroStack acts as an autonomous AI-driven assistant with modular architecture:
 
 1. **Routing and Parsing**: Messages hit the system (via web sockets/REST) and are evaluated by `chatService.ts`. The input is checked via the command parser (`src/commands/parser.ts`) to see if it starts with an `@command`.
 2. **Execution Paths**:
@@ -74,7 +74,7 @@ To enforce AI consistency, context patterns are passed strictly via specific `.m
 The system pulls **Markdown** from the standard workspace locations under `./context`:
 
 ### System-Wide Context
-- **`context/rules/system_rules.md`**: Foundational system rules describing how Jarvis should behave overall.
+- **`context/rules/system_rules.md`**: Foundational system rules describing how NeuroStack should behave overall.
 - **`context/rules/anti_hallucination.md`**: Strict guardrails establishing explicit limits mitigating AI dreaming.
 - **`context/agents/code_generation_guidelines.md`**: Best practices loaded when invoking code generators to adhere to the tech stack.
 

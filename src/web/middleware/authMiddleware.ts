@@ -19,12 +19,14 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   '/api/auth/register',
   '/api/health',
-  '/login',
+  '/signin',
+  '/signup',
+  '/',
 ];
 
 /**
  * Express middleware that gates API and view routes behind authentication.
- * Checks for a `jarvis_token` cookie (or `Authorization` header) on every
+ * Checks for a `neurostack_token` cookie (or `Authorization` header) on every
  * request, except for public paths and static assets.
  *
  * In development mode (`NODE_ENV=development`), if no token is provided
@@ -38,30 +40,25 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
 
   // Always allow public paths
-  if (PUBLIC_PATHS.some((p) => req.path.startsWith(p))) {
+  if (PUBLIC_PATHS.some((p) => req.path === p || (p !== '/' && req.path.startsWith(p)))) {
     next();
     return;
   }
 
   // Extract token from cookie or Authorization header
   const token =
-    (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('jarvis_token='))
+    (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('neurostack_token='))
       ?.split('=')[1]?.trim()) ||
     req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
-    // Dev bypass: allow anonymous access in development
-    if (process.env.NODE_ENV === 'development') {
-      log.debug('Dev bypass — no token, allowing request', { source: 'authMiddleware', path: req.path });
-      next();
-      return;
-    }
 
-    // For API routes → 401 JSON, for view routes → redirect to login
+
+    // For API routes → 401 JSON, for view routes → redirect to signin
     if (req.path.startsWith('/api/')) {
       res.status(401).json({ type: 'error', content: 'Authentication required.' });
     } else {
-      res.redirect('/login');
+      res.redirect('/signin');
     }
     return;
   }
@@ -71,7 +68,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     if (req.path.startsWith('/api/')) {
       res.status(401).json({ type: 'error', content: 'Invalid or expired token.' });
     } else {
-      res.redirect('/login');
+      res.redirect('/signin');
     }
     return;
   }
