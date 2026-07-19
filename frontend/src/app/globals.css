@@ -1,0 +1,221 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Dark — true dark navy, night coding (app default) ── */
+  /* :root matches theme-dark so first paint is always dark  */
+  :root,
+  .theme-dark {
+    --background: 220 13% 9%;
+    --foreground: 210 40% 98%;
+    --card: 220 13% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 13% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 220 13% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 13% 17%;
+    --muted-foreground: 215 20% 60%;
+    --accent: 220 13% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 20%;
+    --input: 220 13% 20%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    transition: background-color 0.2s ease, color 0.15s ease;
+  }
+}
+
+/*
+ * THEME OVERRIDES
+ *
+ * These rules live outside @layer so Tailwind's PostCSS plugin cannot strip
+ * them. Unlayered CSS has higher cascade priority than @layer rules, which
+ * means these selectors correctly override the :root dark defaults whenever
+ * a theme class is present on <html>.
+ *
+ * CORE THEMES: Light, Dim
+ * BONUS THEMES: Nord, Solarized, Sepia, Dracula, High Contrast
+ */
+
+/* ── Light — clean white, highest readability ────────── */
+.theme-light {
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 221 83% 53%;
+  --radius: 0.5rem;
+}
+
+/* ── Dim — mid-tone slate + soft indigo, evening work ── */
+.theme-dim {
+  --background: 240 8% 15%;
+  --foreground: 220 14% 88%;
+  --card: 240 8% 19%;
+  --card-foreground: 220 14% 88%;
+  --popover: 240 8% 19%;
+  --popover-foreground: 220 14% 88%;
+  --primary: 258 68% 67%;
+  --primary-foreground: 240 8% 10%;
+  --secondary: 240 8% 24%;
+  --secondary-foreground: 220 14% 88%;
+  --muted: 240 8% 24%;
+  --muted-foreground: 220 8% 55%;
+  --accent: 258 68% 67%;
+  --accent-foreground: 240 8% 10%;
+  --destructive: 0 62% 40%;
+  --destructive-foreground: 220 14% 88%;
+  --border: 240 8% 26%;
+  --input: 240 8% 26%;
+  --ring: 258 68% 67%;
+  --radius: 0.5rem;
+}
+
+/* ── Nord — arctic blues, focused & calm ─────────────── */
+.theme-nord {
+  --background: 220 16% 22%;      /* Polar Night base03 #2E3440 */
+  --foreground: 218 27% 94%;      /* Snow Storm base3  #ECEFF4 */
+  --card: 222 16% 28%;            /* Polar Night base02 #3B4252 */
+  --card-foreground: 218 27% 94%;
+  --popover: 222 16% 28%;
+  --popover-foreground: 218 27% 94%;
+  --primary: 210 34% 63%;         /* Frost #81A1C1 */
+  --primary-foreground: 220 16% 22%;
+  --secondary: 220 16% 31%;       /* Polar Night #434C5E */
+  --secondary-foreground: 218 27% 94%;
+  --muted: 220 16% 31%;
+  --muted-foreground: 213 27% 72%; /* Snow Storm base1 #D8DEE9 */
+  --accent: 193 43% 67%;          /* Frost cyan #88C0D0 */
+  --accent-foreground: 220 16% 22%;
+  --destructive: 354 42% 56%;     /* Aurora red #BF616A */
+  --destructive-foreground: 218 27% 94%;
+  --border: 220 16% 32%;
+  --input: 220 16% 32%;
+  --ring: 210 34% 63%;
+  --radius: 0.5rem;
+}
+
+/* ── Solarized Dark — warm tones, cult classic ────────── */
+.theme-solarized {
+  --background: 193 100% 11%;      /* base03 #002b36 */
+  --foreground: 44 87% 94%;        /* base3  #fdf6e3 */
+  --card: 192 81% 14%;             /* base02 #073642 */
+  --card-foreground: 44 87% 94%;
+  --popover: 192 81% 14%;
+  --popover-foreground: 44 87% 94%;
+  --primary: 205 69% 49%;          /* blue   #268bd2 */
+  --primary-foreground: 193 100% 11%;
+  --secondary: 192 81% 14%;
+  --secondary-foreground: 44 87% 94%;
+  --muted: 192 81% 14%;
+  --muted-foreground: 186 13% 52%; /* base0  #839496 */
+  --accent: 45 100% 35%;           /* yellow #b58900 */
+  --accent-foreground: 193 100% 11%;
+  --destructive: 1 71% 52%;        /* red    #dc322f */
+  --destructive-foreground: 44 87% 94%;
+  --border: 192 30% 22%;
+  --input: 192 30% 22%;
+  --ring: 205 69% 49%;
+  --radius: 0.5rem;
+}
+
+/* ── Sepia — warm paper tone, long reading sessions ─────── */
+.theme-sepia {
+  --background: 40 50% 94%;
+  --foreground: 28 40% 17%;
+  --card: 40 45% 97%;
+  --card-foreground: 28 40% 17%;
+  --popover: 40 45% 97%;
+  --popover-foreground: 28 40% 17%;
+  --primary: 25 65% 40%;           /* sienna */
+  --primary-foreground: 40 50% 96%;
+  --secondary: 40 30% 87%;
+  --secondary-foreground: 28 40% 17%;
+  --muted: 40 30% 87%;
+  --muted-foreground: 30 20% 45%;
+  --accent: 38 80% 50%;            /* warm amber */
+  --accent-foreground: 28 40% 17%;
+  --destructive: 0 65% 45%;
+  --destructive-foreground: 40 50% 96%;
+  --border: 40 25% 82%;
+  --input: 40 25% 82%;
+  --ring: 25 65% 40%;
+  --radius: 0.5rem;
+}
+
+/* ── Dracula — vivid purple & pink, VS Code favourite ─── */
+.theme-dracula {
+  --background: 231 15% 18%;       /* #282a36 */
+  --foreground: 60 30% 96%;        /* #f8f8f2 */
+  --card: 232 14% 25%;             /* between bg and current-line */
+  --card-foreground: 60 30% 96%;
+  --popover: 232 14% 25%;
+  --popover-foreground: 60 30% 96%;
+  --primary: 265 89% 78%;          /* purple  #bd93f9 */
+  --primary-foreground: 231 15% 18%;
+  --secondary: 232 14% 31%;        /* current-line #44475a */
+  --secondary-foreground: 60 30% 96%;
+  --muted: 232 14% 31%;
+  --muted-foreground: 225 27% 60%; /* comment #6272a4 lightened */
+  --accent: 326 100% 74%;          /* pink    #ff79c6 */
+  --accent-foreground: 231 15% 18%;
+  --destructive: 0 100% 67%;       /* red     #ff5555 */
+  --destructive-foreground: 60 30% 96%;
+  --border: 232 14% 32%;
+  --input: 232 14% 32%;
+  --ring: 265 89% 78%;
+  --radius: 0.5rem;
+}
+
+/* ── High Contrast — WCAG AAA, OLED-friendly ────────────── */
+.theme-high-contrast {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 6%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 6%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 54 100% 50%;          /* vivid yellow — max contrast on black */
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 78%;
+  --accent: 54 100% 50%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 100% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 38%;
+  --input: 0 0% 18%;
+  --ring: 54 100% 50%;
+  --radius: 0.5rem;
+}

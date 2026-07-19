@@ -1,0 +1,53 @@
+# ── Next.js ──────────────────────────────────────────────────────────────────
+.next/
+out/
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Keep the example file
+!.env.local.example
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+build/
+
+# ── TypeScript ────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+# Compiled TypeScript artifacts — tsconfig uses "noEmit": true; Next.js compiles
+# these itself. Delete any that were accidentally generated and prevent re-commit.
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+next.config.js
+next.config.js.map
+next.config.d.ts
+tailwind.config.js
+tailwind.config.js.map
+tailwind.config.d.ts
+
+# ── Test coverage ─────────────────────────────────────────────────────────────
+coverage/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editors ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Vercel ────────────────────────────────────────────────────────────────────
+.vercel

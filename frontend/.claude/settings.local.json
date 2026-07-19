@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from PIL import Image; print\\('Pillow OK'\\)\")",
+      "Bash(pip3 install *)",
+      "Bash(python3 *)",
+      "Read(//Users/mindpath/Work-Flow-Analyst/**)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const d = new Date\\(\\); console.log\\('Today UTC:', d.toISOString\\(\\).slice\\(0,10\\)\\)\")",
+      "Bash(node scripts/seed-dummy-data.mjs --clean)",
+      "Bash(CLAUDE_CODE_TMPDIR=/Users/mindpath/.claude/jobs/8451098d/tmp ls /Users/mindpath/Work-Flow-Analyst/node_modules/azure-devops-node-api/)"
+    ]
+  }
+}
