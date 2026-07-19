@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuroStack — Folder Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117; color: #e6e8ee; }
+    header { padding: 16px 24px; border-bottom: 1px solid #232634; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.1rem; margin: 0; }
+    header .badge { font-size: .7rem; background: #2a2f42; padding: 2px 8px; border-radius: 10px; color: #9aa4c0; }
+    main { max-width: 900px; margin: 0 auto; padding: 24px; display: grid; gap: 20px; }
+    .card { background: #161925; border: 1px solid #232634; border-radius: 12px; padding: 16px; }
+    .card h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: #9aa4c0; margin: 0 0 12px; }
+    .path { font-family: monospace; font-size: .85rem; color: #7dd3fc; word-break: break-all; }
+    .dir-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+    .dir-list li { padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: .9rem; display: flex; gap: 8px; }
+    .dir-list li:hover { background: #222636; }
+    button { font: inherit; border: none; border-radius: 8px; padding: 9px 16px; cursor: pointer; background: #2a2f42; color: #e6e8ee; }
+    button.primary { background: #3b82f6; color: #fff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.small { padding: 5px 10px; font-size: .8rem; }
+    textarea { width: 100%; min-height: 90px; background: #0f1117; border: 1px solid #2a2f42; border-radius: 8px;
+      color: #e6e8ee; padding: 10px; font: inherit; resize: vertical; }
+    select { background: #0f1117; border: 1px solid #2a2f42; border-radius: 8px; color: #e6e8ee; padding: 8px; font: inherit; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .log { font-family: monospace; font-size: .82rem; background: #0b0d13; border-radius: 8px; padding: 12px;
+      max-height: 340px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+    .log .handoff { color: #fbbf24; }
+    .log .done { color: #34d399; }
+    .log .error { color: #f87171; }
+    .log .paused { color: #fbbf24; }
+    .approval { background: #2a220f; border: 1px solid #7c5e12; border-radius: 8px; padding: 12px; margin: 8px 0; }
+    .approval code { color: #fbbf24; }
+    .muted { color: #6b7280; font-size: .8rem; }
+    a { color: #7dd3fc; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔁 NeuroStack Folder Agent</h1>
+    <span class="badge">autonomous · multi-model · resumable</span>
+    <a href="/app" style="margin-left:auto; font-size:.85rem;">← Chat</a>
+  </header>
+  <main>
+    <div class="card">
+      <h2>1 · Select a folder</h2>
+      <div class="path" id="current-path">…</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="small" id="parent-btn">⬆ Parent</button>
+        <button class="small primary" id="use-btn">✓ Use this folder</button>
+      </div>
+      <ul class="dir-list" id="dir-list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>2 · Describe the work</h2>
+      <div class="muted" id="selected">Selected folder: (none — pick one above)</div>
+      <textarea id="prompt" placeholder="e.g. Add an Express /health endpoint with a test, then run the tests and fix until they pass."></textarea>
+      <div class="row" style="margin-top:12px;">
+        <label>Mode
+          <select id="mode">
+            <option value="auto">auto — only high-risk commands ask</option>
+            <option value="manual">manual — ask before every command</option>
+          </select>
+        </label>
+        <button class="primary" id="start-btn" disabled>▶ Start</button>
+        <button id="resume-btn" disabled>⟳ Resume</button>
+        <button id="status-btn" disabled>ℹ Status</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Progress</h2>
+      <div id="approvals"></div>
+      <div class="log" id="log">Idle.</div>
+    </div>
+  </main>
+  <script src="/js/folder.js"></script>
+</body>
+</html>

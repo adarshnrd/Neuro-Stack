@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { validateToken } from '../../services/authService.js';
-import { createChildLogger } from '../../logger/index.js';
-
-const log = createChildLogger('authMiddleware');
+import { getCookie } from '../../utils/cookieUtil.js';
 
 // Extend Express Request to carry auth state
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       userId?: string;
@@ -14,23 +13,20 @@ declare global {
   }
 }
 
-/** Paths that do not require authentication */
-const PUBLIC_PATHS = [
+/** Paths that do not require authentication (exact match) */
+const PUBLIC_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/register',
   '/api/health',
   '/signin',
   '/signup',
   '/',
-];
+]);
 
 /**
  * Express middleware that gates API and view routes behind authentication.
  * Checks for a `neurostack_token` cookie (or `Authorization` header) on every
  * request, except for public paths and static assets.
- *
- * In development mode (`NODE_ENV=development`), if no token is provided
- * the middleware allows requests through without auth — acting as a dev bypass.
  */
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   // Always allow static assets
@@ -40,20 +36,15 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
 
   // Always allow public paths
-  if (PUBLIC_PATHS.some((p) => req.path === p || (p !== '/' && req.path.startsWith(p)))) {
+  if (PUBLIC_PATHS.has(req.path)) {
     next();
     return;
   }
 
   // Extract token from cookie or Authorization header
-  const token =
-    (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('neurostack_token='))
-      ?.split('=')[1]?.trim()) ||
-    req.headers.authorization?.replace('Bearer ', '');
+  const token = getCookie(req, 'neurostack_token') || req.headers.authorization?.replace('Bearer ', '');
 
   if (!token) {
-
-
     // For API routes → 401 JSON, for view routes → redirect to signin
     if (req.path.startsWith('/api/')) {
       res.status(401).json({ type: 'error', content: 'Authentication required.' });

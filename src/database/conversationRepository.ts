@@ -124,6 +124,39 @@ export async function getConversationCount(sessionId: string): Promise<number> {
   return count ?? 0;
 }
 
+/**
+ * Fetches the most recent conversations for a session in chronological order.
+ * Used to build LLM context — returns only user and assistant messages.
+ *
+ * @param sessionId - The session to fetch conversations for
+ * @param limit     - Maximum number of messages to return (default 20)
+ */
+export async function getRecentConversations(
+  sessionId: string,
+  limit: number = 20,
+): Promise<ConversationRecord[]> {
+  const supabase = getSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('id, session_id, user_id, role, content, response_type, metadata, created_at')
+    .eq('session_id', sessionId)
+    .in('role', ['user', 'assistant'])
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    log.error('Failed to fetch recent conversations', {
+      source: 'conversationRepository#getRecentConversations',
+      error: error.message,
+      sessionId,
+    });
+    return [];
+  }
+
+  // Reverse to chronological order (oldest first)
+  return (data || []).map(mapRow).reverse();
+}
 // ── Internal mapper ────────────────────────────────────────────────────────────
 
 function mapRow(row: Record<string, unknown>): ConversationRecord {

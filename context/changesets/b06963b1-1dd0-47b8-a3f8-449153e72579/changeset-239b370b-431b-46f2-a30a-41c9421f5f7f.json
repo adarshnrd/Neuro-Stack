@@ -1,0 +1,38 @@
+{
+  "changeSetId": "239b370b-431b-46f2-a30a-41c9421f5f7f",
+  "sessionId": "b06963b1-1dd0-47b8-a3f8-449153e72579",
+  "status": "PENDING",
+  "files": [
+    {
+      "filePath": "hello.js",
+      "originalContent": "",
+      "proposedContent": "\nexport function greet(name) {\n  return `Hello, ${name}! Welcome to NeuroStack`;\n}\n",
+      "diffLines": [
+        {
+          "type": "add",
+          "newLineNumber": 1,
+          "content": ""
+        },
+        {
+          "type": "add",
+          "newLineNumber": 2,
+          "content": "export function greet(name) {"
+        },
+        {
+          "type": "add",
+          "newLineNumber": 3,
+          "content": "  return `Hello, ${name}! Welcome to NeuroStack`;"
+        },
+        {
+          "type": "add",
+          "newLineNumber": 4,
+          "content": "}"
+        }
+      ],
+      "status": "ADDED"
+    }
+  ],
+  "comments": [],
+  "createdAt": "2026-07-17T20:59:31.251Z",
+  "updatedAt": "2026-07-17T20:59:34.710Z"
+}

@@ -11,6 +11,3 @@ export function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 3) + '...';
 }
 
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
-}

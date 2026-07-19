@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ChangeSet, FileChange, ReviewComment } from '../types/reviewTypes.js';
 import { ChangeSetStatus, FileChangeStatus } from '../enums/reviewEnum.js';
 import { computeLineDiff } from '../utils/diffUtil.js';
-import { ensureDirectory, fileExists } from '../utils/fileUtil.js';
+import { ensureDirectory, fileExists, resolveInsideRoot } from '../utils/fileUtil.js';
 import { config } from '../config/index.js';
 import { createChildLogger } from '../logger/index.js';
 
@@ -60,7 +60,7 @@ export class ChangeSetService {
           const content = await fs.readFile(path.join(dir, file), 'utf-8');
           const changeSet: ChangeSet = JSON.parse(content);
           this.inMemoryStore.set(changeSet.changeSetId, changeSet);
-        } catch (error: unknown) {
+        } catch {
           log.warn(`Failed to parse changeset file ${file}`, { source: 'changeSetService#loadSessionChangesetsFromDisk' });
         }
       }
@@ -161,6 +161,48 @@ export class ChangeSetService {
   }
 
   /**
+   * Returns the staged proposed content for a file within a changeset, or
+   * undefined if the file has no pending change. Lets tools present staged
+   * edits as the current file state across loop iterations (edits are held in
+   * the changeset, not written to disk until accepted).
+   */
+  public getStagedContent(changeSetId: string, filePath: string): string | undefined {
+    const change = this.inMemoryStore.get(changeSetId)?.files.find((f) => f.filePath === filePath);
+    if (!change) return undefined;
+    return change.status === FileChangeStatus.DELETED ? '' : change.proposedContent;
+  }
+
+  /**
+   * Renders a compact, reviewer-friendly summary of all staged changes:
+   * per-file status and proposed content. Used as fresh-context input for the
+   * REVIEWER role (it never sees the coder's conversation).
+   */
+  public renderForReview(changeSetId: string): string {
+    const changeSet = this.inMemoryStore.get(changeSetId);
+    if (!changeSet || changeSet.files.length === 0) return '(no files changed)';
+
+    return changeSet.files
+      .map((f) => {
+        if (f.status === FileChangeStatus.DELETED) return `### ${f.filePath} — DELETED`;
+        const body = f.proposedContent.length > 6000
+          ? `${f.proposedContent.slice(0, 6000)}\n…[truncated]`
+          : f.proposedContent;
+        return `### ${f.filePath} — ${f.status}\n\`\`\`\n${body}\n\`\`\``;
+      })
+      .join('\n\n');
+  }
+
+  /** Stable fingerprint of the staged file set — used for loop stall detection. */
+  public fingerprint(changeSetId: string): string {
+    const changeSet = this.inMemoryStore.get(changeSetId);
+    if (!changeSet) return '';
+    return changeSet.files
+      .map((f) => `${f.filePath}:${f.status}:${f.proposedContent.length}:${hashString(f.proposedContent)}`)
+      .sort()
+      .join('|');
+  }
+
+  /**
    * Lists all changesets for a particular session
    */
   public listChangeSets(sessionId: string): ChangeSet[] {
@@ -177,7 +219,8 @@ export class ChangeSetService {
     if (!changeSet) throw new Error(`ChangeSet not found: ${changeSetId}`);
 
     for (const file of changeSet.files) {
-      const fullPath = path.join(config.workspace.path, file.filePath);
+      // File paths originated from the LLM — never let one escape the workspace
+      const fullPath = resolveInsideRoot(config.workspace.path, file.filePath);
       if (file.status === FileChangeStatus.DELETED) {
         if (await fileExists(fullPath)) {
           await fs.unlink(fullPath);
@@ -247,6 +290,15 @@ export class ChangeSetService {
     await this.saveToDisk(changeSet);
     log.info('ChangeSet revision requested', { source: 'changeSetService#requestRevision', changeSetId });
   }
+}
+
+/** Small non-cryptographic hash (djb2) for change fingerprinting. */
+function hashString(input: string): string {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(36);
 }
 
 // Export singleton instance

@@ -1,12 +1,14 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { createLLMProvider } from '../llm/provider.js';
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { invokeLLM } from '../llm/llmService.js';
 import { config } from '../config/index.js';
 import { createChildLogger, withQueryId } from '../logger/index.js';
 import { parseUserInput } from '../commands/parser.js';
 import { commandRegistry } from '../commands/registry.js';
 import { CommandName } from '../enums/commandEnum.js';
-import { SYSTEM_PROMPT } from '../constants/chatConstants.js';
+import { ConversationRole } from '../enums/conversationEnum.js';
+import { SYSTEM_PROMPT, CONVERSATION_HISTORY_LIMIT } from '../constants/chatConstants.js';
 import { ChatResult } from '../types/chatTypes.js';
+import { getRecentConversations } from '../database/conversationRepository.js';
 
 const log = createChildLogger('chatService');
 
@@ -57,12 +59,12 @@ export async function handleChatMessage(
         // Successful command results with rich AI content are rendered as 'ai'
         // so the frontend applies streaming Markdown. Failures use 'system'.
         const responseType = result.success ? 'ai' : 'system';
-        const typedData = result.data as Record<string, any> | undefined;
+        const typedData = result.data as Record<string, unknown> | undefined;
         return {
           type: responseType,
           content: result.message,
-          changeSetId: typedData?.changeSetId,
-          changesSummary: typedData?.changesSummary
+          changeSetId: typedData?.changeSetId as string | undefined,
+          changesSummary: typedData?.changesSummary as ChatResult['changesSummary'],
         };
       }
 
@@ -81,28 +83,39 @@ export async function handleChatMessage(
       model: config.llm.model
     });
 
-    const llmStartTime = Date.now();
-    const llm = createLLMProvider(config.llm);
+    // Fetch conversation history for multi-turn context
+    const conversationHistory = await getRecentConversations(sessionId, CONVERSATION_HISTORY_LIMIT);
 
-    const response = await llm.invoke([
-      new SystemMessage(SYSTEM_PROMPT),
-      new HumanMessage(message),
-    ]);
+    traceLog.debug('Conversation history loaded', {
+      source: 'chatService#handleChatMessage',
+      historyCount: conversationHistory.length,
+      sessionId,
+    });
+
+    // Build the messages array: system prompt → history → current message
+    const messages: BaseMessage[] = [new SystemMessage(SYSTEM_PROMPT)];
+
+    for (const entry of conversationHistory) {
+      if (entry.role === ConversationRole.USER) {
+        messages.push(new HumanMessage(entry.content));
+      } else if (entry.role === ConversationRole.ASSISTANT) {
+        messages.push(new AIMessage(entry.content));
+      }
+    }
+
+    messages.push(new HumanMessage(message));
+
+    const llmStartTime = Date.now();
+    const content = await invokeLLM(messages, queryId);
 
     traceLog.debug('LLM response received', {
       source: 'chatService#handleChatMessage',
       llmDurationMs: Date.now() - llmStartTime,
     });
 
-    const content =
-      typeof response.content === 'string'
-        ? response.content
-        : JSON.stringify(response.content);
-
     traceLog.info('Chat execution complete', {
       source: 'chatService#handleChatMessage',
       contentLength: content.length,
-      content,
       totalDurationMs: Date.now() - startTime
     });
 

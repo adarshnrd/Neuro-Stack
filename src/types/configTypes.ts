@@ -44,6 +44,28 @@ export interface DatabaseConfig {
   apiKey: string;
 }
 
+export interface AuthConfig {
+  sessionSecret: string;
+  tokenTtlSeconds: number;
+}
+
+export interface FolderAgentConfig {
+  /** Base directory the web folder-picker is allowed to browse within. */
+  browseRoot: string;
+}
+
+export interface ProviderCredentials {
+  apiKey: string;
+  model: string;
+}
+
+/** Optional additional model providers used by role-based routing. */
+export interface LLMProvidersConfig {
+  groq?: ProviderCredentials;
+  nvidia?: ProviderCredentials;
+  nvidiaUltra?: ProviderCredentials;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   llm: LLMConfig;
@@ -53,4 +75,7 @@ export interface AppConfig {
   session: SessionConfig;
   log: LogConfig;
   database: DatabaseConfig;
+  auth: AuthConfig;
+  llmProviders: LLMProvidersConfig;
+  folderAgent: FolderAgentConfig;
 }

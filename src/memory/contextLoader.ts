@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { fileExists, ensureDirectory } from '../utils/fileUtil.js';
+import { fileExists } from '../utils/fileUtil.js';
 import { config } from '../config/index.js';
 import { createChildLogger } from '../logger/index.js';
 

@@ -4,6 +4,23 @@ import { createChildLogger } from '../logger/index.js';
 
 const log = createChildLogger('fileUtil');
 
+/**
+ * Resolves a relative path against a root directory, guaranteeing the result
+ * stays inside the root. Throws on traversal attempts (e.g. `../../etc/passwd`)
+ * and on absolute paths. Use for any path that originates from user or LLM input.
+ */
+export function resolveInsideRoot(rootDir: string, relativePath: string): string {
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(root, relativePath);
+
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    log.warn('Blocked path escaping root directory', { source: 'fileUtil#resolveInsideRoot', relativePath });
+    throw new Error(`Path escapes the workspace: ${relativePath}`);
+  }
+
+  return resolved;
+}
+
 export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
@@ -31,4 +48,21 @@ export async function writeJson<T>(filePath: string, data: T): Promise<void> {
   log.debug('Writing JSON file', { source: 'fileUtil#writeJson', filePath });
   await ensureDirectory(path.dirname(filePath));
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+/**
+ * Writes a file transactionally: content goes to a temp file in the same
+ * directory, then is atomically renamed into place. A crash or mid-write
+ * interruption never leaves a partially written target file.
+ */
+export async function writeFileTransactional(filePath: string, content: string): Promise<void> {
+  await ensureDirectory(path.dirname(filePath));
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(tempPath, content, 'utf-8');
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => { /* best effort */ });
+    throw error;
+  }
 }

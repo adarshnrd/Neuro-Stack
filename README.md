@@ -1,39 +1,32 @@
 # 🤖 Project NeuroStack
 
-> **AI-Powered Git Workflow Assistant** — An intelligent development assistant built with Node.js, LangChain, LangGraph, and Google Gemini.
+> **Autonomous, multi-model AI development agent.** Describe what you want in plain English (or a
+> `.md` spec) and NeuroStack plans, writes code, runs commands, tests, and iterates until it's done —
+> and it **never stops when one model hits its limit**, handing off across providers and checkpointing
+> to disk so work resumes exactly where it left off.
 
-Project NeuroStack understands your development intent through natural language and structured commands, generates production-ready code, manages Git repositories, and handles the full PR lifecycle — all from a single chat interface.
-
----
-
-## 📋 Table of Contents
-
-- [Features](#-features)
-- [Tech Stack](#-tech-stack)
-- [Quick Start](#-quick-start)
-- [Configuration](#-configuration)
-- [Commands Reference](#-commands-reference)
-- [Architecture](#-architecture)
-- [Project Structure](#-project-structure)
-- [Context System](#-context-system-markdown-memory)
-- [Session Management](#-session-management)
-- [Governance & Safety](#-governance--safety-rules)
-- [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
+Built with Node.js + TypeScript, LangChain, LangGraph, and a role-based router over **Google Gemini,
+Groq, and NVIDIA NIM**.
 
 ---
 
-## ✨ Features
+## ✨ Highlights
 
-- **Natural Language Chat** — Describe what you want in plain English
-- **Structured Commands** — 7 deterministic commands for precise control
-- **Code Generation** — Production-ready TypeScript code following SOLID principles
-- **Git Integration** — Full PR lifecycle (create, review, approve, merge)
-- **Markdown Memory** — Persistent context, rules, and learning via `.md` files
-- **Model Abstraction** — Plug-and-play LLM switching (Gemini, OpenAI, etc.)
-- **Human-in-the-Loop** — No destructive action without explicit approval
-- **Session Management** — Smart session lifecycle with auto-archival
-- **Anti-Hallucination** — Tool-based execution, validated outputs, learned corrections
+- **Folder Agent** — point it at a local folder; it works directly inside it like Claude Code: reads
+  files, writes changes, runs terminal commands, and loops (plan → implement → verify → fix) until the
+  task is complete. CLI **and** web UI.
+- **Cross-model continuity** — when a model exhausts its quota/rate limit mid-task, NeuroStack hands off
+  to the next provider in the chain and continues without losing work. When every provider is spent, it
+  pauses gracefully and resumes later.
+- **Durable filesystem state** — every run tracks progress in a `.neurostack/` state store (plan,
+  progress log, rolling summary, decisions, open issues, snapshots). Kill it mid-run and `resume`
+  picks up from disk. **No git involvement** — version control stays 100% manual.
+- **Role-based multi-model routing** — each stage (plan, code, review, summarize, validate) runs on the
+  best-suited model, with automatic fallback chains.
+- **Two permission modes** — `auto` (runs freely, asks only before high-risk commands) and `manual`
+  (asks before every command). Commands are cwd-locked to the selected folder.
+- **Chat interface** — multi-turn conversation plus structured `@commands`, with staged human-review of
+  AI-generated changes.
 
 ---
 
@@ -41,289 +34,182 @@ Project NeuroStack understands your development intent through natural language 
 
 | Component | Technology |
 |-----------|-----------|
-| Runtime | Node.js + TypeScript |
-| AI Orchestration | LangGraph (stateful workflows) |
-| AI Tooling | LangChain (tools + model abstraction) |
-| Default LLM | Google Gemini (`gemini-2.5-flash`) |
-| Git (Local) | simple-git |
-| Git (Remote) | Octokit (GitHub API) |
-| Web Server | Express + Handlebars |
-| Real-time | WebSocket (ws) |
-| Logging | Winston |
-| Validation | Zod |
-| Persistence | Markdown files (no database) |
+| Runtime | Node.js ≥ 18 + TypeScript (strict, ESM) |
+| Orchestration | LangGraph (stateful agent loop) + LangChain (tools, model abstraction) |
+| Models | **Gemini** (`gemini-2.5-flash`), **Groq** (`llama-3.3-70b`), **NVIDIA NIM** (Nemotron 30B nano + 550B Ultra) |
+| Persistence (app) | Supabase / Postgres (users, sessions, conversations) |
+| Persistence (runs) | Filesystem `.neurostack/` state store |
+| Git / GitHub | simple-git · Octokit |
+| Web | Express + Handlebars + Server-Sent Events |
+| Auth | Signed session tokens (HMAC) + bcrypt |
+| Logging / Validation | Winston · Zod |
+| Quality | Vitest · ESLint · GitHub Actions CI |
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+- Node.js ≥ 18, Git
+- A **Supabase** project (URL + secret key)
+- At least one model key: **Google Gemini** (recommended primary), optionally **Groq** and **NVIDIA NIM**
 
-- **Node.js** ≥ 18.x
-- **Git** installed and configured
-- **Google Gemini API Key** from [Google AI Studio](https://aistudio.google.com/)
-- **GitHub PAT** or GitHub App credentials
-
-### Installation
-
+### Install & configure
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/project-neurostack.git
-cd project-neurostack
-
-# 2. Install dependencies
+git clone <repo-url> && cd "Project NeuroStack"
 npm install
-
-# 3. Configure environment
-cp .env.example .env
-# Edit .env with your API keys (see Configuration section)
-
-# 4. Start development server
-npm run dev
-
-# 5. Open the chat interface
-# Navigate to http://localhost:3000
+cp .env.example .env      # fill in the values below
 ```
 
-### NPM Scripts
+### Database
+Run the SQL migrations in the Supabase SQL Editor, in order:
+1. `src/database/migrations/001_initial_schema.sql`
+2. `src/database/migrations/002_fix_rls_policies.sql`
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server with hot reload |
-| `npm run build` | Compile TypeScript to JavaScript |
-| `npm start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run clean` | Remove build artifacts |
+### Run
+```bash
+npm run dev               # web server at http://localhost:3000
+```
+- Chat UI: `http://localhost:3000/app`
+- Folder Agent UI: `http://localhost:3000/folder`
+
+Or drive the folder agent from the CLI (no server needed):
+```bash
+npm run folder /path/to/project "Add an Express /health endpoint with a test, then run the tests and fix until they pass"
+```
 
 ---
 
 ## ⚙️ Configuration
 
-All configuration is managed via environment variables in `.env`:
-
 ```env
-# ──── Server ────
+# ── Server ──
 PORT=3000
 NODE_ENV=development
 
-# ──── LLM ────
-LLM_PROVIDER=gemini              # gemini | openai
-LLM_MODEL=gemini-2.5-flash       # Model name
-GOOGLE_API_KEY=your-key-here      # Required for Gemini
+# ── Models ──
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.5-flash
+GOOGLE_API_KEY=                       # Gemini (primary coder/chat)
+GROQ_API_KEY=                         # Groq — fast fallback + summarize/validate roles
+GROQ_MODEL=llama-3.3-70b-versatile
+NVIDIA_API_KEY=                       # NVIDIA nano — reasoning + last-resort coder
+NVIDIA_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+NVIDIA_ULTRA_API_KEY=                 # NVIDIA Ultra 550B — planning + review
+NVIDIA_ULTRA_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 
-# ──── GitHub Auth (Option 1: PAT — recommended for Phase 1) ────
-GITHUB_TOKEN=ghp_your-token-here
+# ── Supabase (required) ──
+SUPA_BASE_PROJECT_URL=
+SUPA_BASE_DB_API_KEY=
 
-# ──── GitHub Auth (Option 2: GitHub App) ────
-# GITHUB_APP_ID=12345
-# GITHUB_PRIVATE_KEY_PATH=./private-key.pem
-# GITHUB_INSTALLATION_ID=67890
+# ── Auth ──
+SESSION_SECRET=                       # ≥32 chars; generate with:
+                                      #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
-# ──── Repository ────
-GITHUB_OWNER=your-org
-GITHUB_REPO=your-repo
-GITHUB_DEFAULT_BRANCH=main
+# ── Folder Agent ──
+FOLDER_AGENT_ROOT=                    # base dir the web folder-picker may browse (default: home dir)
 
-# ──── Paths ────
-WORKSPACE_PATH=./workspace
-CONTEXT_PATH=./context
-
-# ──── Session ────
-SESSION_ACTIVE_WINDOW_HOURS=5     # Session active window (1-5 hours)
-SESSION_RETENTION_DAYS=2          # Keep session data for N days
-SESSION_AUTO_PURGE_DAYS=4         # Auto-delete after N days inactivity
-
-# ──── Context ────
-CONTEXT_MAX_FILE_SIZE_KB=500
-ARCHIVE_RETENTION_DAYS=30
-
-# ──── Logging ────
-LOG_LEVEL=info                    # error | warn | info | debug
+# ── GitHub (optional; manual PR flows) ──
+GITHUB_TOKEN=
+GITHUB_OWNER=
+GITHUB_REPO=
 ```
-
-### Authentication Priority
-
-If both PAT and GitHub App credentials are provided, PAT takes priority.
+Only Gemini + Supabase are strictly required; Groq and NVIDIA are optional but unlock the fallback
+chains and reduce free-tier pausing.
 
 ---
 
-## 📖 Commands Reference
+## 🧠 Multi-Model Routing
 
-All commands are prefixed with `@` and can be typed in the chat input.
+Every stage of work runs on the model best suited to it, and each role has an ordered **fallback
+chain** — if a provider errors or is exhausted, the next one takes over automatically.
 
-### `@AGENT`
+| Role | Chain (first available wins) | Why |
+|------|------------------------------|-----|
+| **Planner** | Ultra 550B → nano → Gemini → Groq | Deep reasoning once per task; quality compounds |
+| **Coder** | Gemini → Groq → NVIDIA nano | Proven tool-calling; three-deep so it rarely pauses |
+| **Reviewer** | Ultra 550B → nano → Gemini → Groq | Fresh-context, different family than the coder (counters self-review bias) |
+| **Summarizer** | Groq → Gemini | Fast + cheap; runs every iteration |
+| **Validator** | Groq → Gemini | Strict JSON verdicts, near-free |
+| **Chat** | Gemini → Groq → NVIDIA nano | Availability |
 
-> **Generate code from a requirement description.**
-
-```
-@AGENT Create a user authentication system with JWT tokens
-```
-
-**Workflow:**
-1. Analyzes your requirement
-2. Asks clarifying questions (if needed)
-3. Generates a structured technical plan
-4. Waits for your approval
-5. Generates production-ready code
-6. Suggests creating a PR with `@CREATE_PR`
+Errors are classified as **retryable** (back off, same provider), **exhausted** (fail over to the next
+model), or **fatal** (surface). `npm run smoke:providers` exercises every role live.
 
 ---
 
-### `@AGENT_FIX_CODE`
+## 📂 The Folder Agent
 
-> **Analyze and fix issues in existing code.**
+The headline capability: autonomous development inside a real project folder.
 
+```bash
+npm run folder <folder> "<prompt>"          # start a run (auto mode)
+npm run folder <folder> "<prompt>" --manual # ask before every command
+npm run folder resume <folder>              # continue an interrupted/paused run
+npm run folder status <folder>              # show progress + rolling summary
 ```
-@AGENT_FIX_CODE Fix the authentication middleware — tokens are not being validated
-```
+Or use the web UI at `/folder`: browse to a folder, describe the work, watch progress stream live, and
+approve high-risk commands inline.
 
-**Workflow:**
-1. Analyzes the reported issue
-2. Reads relevant source files
-3. Identifies root cause
-4. Generates a fix
-5. Presents the fix for approval
+**How it works**
+1. The folder is opened as a sandboxed, direct-apply workspace (validated: must exist, be writable, not
+   a sensitive root). Writes are transactional (temp + atomic rename).
+2. It's indexed (stack + test-runner detection + file tree) so every model starts situationally aware.
+3. The PLANNER decomposes the task into tracked subtasks (`plan.json`).
+4. The CODER loop runs: read → write → `run_command` (install/build/test) → read output → fix → repeat.
+5. Progress is persisted every step to `.neurostack/`.
+6. On model exhaustion it hands off to the next provider; when all are spent it **pauses resumably**.
+
+**Permission modes** — `auto` runs ordinary commands freely and only pauses for approval on genuinely
+dangerous ones (`rm -rf`, `git push --force`, `dd`, `sudo`, piping remote scripts to a shell, …);
+`manual` pauses before every command. Everything is cwd-locked to the folder.
+
+**`.neurostack/` state store** (recovery mechanism — no git):
+```
+.neurostack/
+├── spec.md              # the task
+├── plan.json            # subtasks + statuses
+├── progress-log.jsonl   # append-only event log
+├── context-summary.md   # compact, model-portable "state of the world"
+├── decisions.md         # decisions made (incl. model handoffs)
+├── open-issues.md       # blockers / things to watch
+├── project-map.json     # cached project index
+├── snapshots/           # pre-write file backups (filesystem-level undo)
+└── state.json           # run status (running/paused/complete/failed)
+```
 
 ---
 
-### `@CREATE_PR`
+## 💬 Chat Commands
 
-> **Create a pull request from generated or existing code.**
+Type in the chat UI at `/app`. Non-command messages are normal multi-turn conversation.
 
-```
-@CREATE_PR Create PR for the JWT authentication feature
-```
+| Command | What it does |
+|---------|--------------|
+| `@AGENT <requirement>` | Tool-using code generation; changes are **staged for review** in a visual diff before you accept |
+| `@AGENT_LOOP <requirement>` | Autonomous plan → implement → verify → review → judge loop (LangGraph), streamed live |
+| `@NEW_SESSION` | Archive the current session and start fresh |
 
-**Workflow:**
-1. Creates a new branch (auto-named)
-2. Stages and commits generated files
-3. Pushes to remote
-4. Creates a GitHub PR with description
-5. Returns PR number and URL
-
----
-
-### `@PR_REVIEW`
-
-> **Perform a detailed review of a pull request.**
-
-```
-@PR_REVIEW #42
-```
-
-**Workflow:**
-1. Fetches the PR diff from GitHub
-2. Analyzes code quality, potential bugs, and improvements
-3. Returns structured review with:
-   - Summary
-   - Issues found (critical/warning/info)
-   - Line-specific comments
-   - Recommendations
-
----
-
-### `@PR_APPROVE`
-
-> **Approve a pull request after validation.**
-
-```
-@PR_APPROVE #42
-```
-
-**Workflow:**
-1. Fetches PR details
-2. Validates review status
-3. Submits approval via GitHub API
-4. Confirms approval to user
-
----
-
-### `@MERGE_PR`
-
-> **Merge a pull request. Requires explicit command — never auto-merges.**
-
-```
-@MERGE_PR #42
-@MERGE_PR #42 --method squash
-```
-
-**Options:**
-- `--method merge` (default) — Standard merge commit
-- `--method squash` — Squash and merge
-- `--method rebase` — Rebase and merge
-
-**Workflow:**
-1. Verifies PR is approved
-2. Asks for final confirmation
-3. Merges via GitHub API
-4. Confirms merge with commit SHA
-
-> ⚠️ **Governance Rule**: PRs are NEVER auto-merged. This command requires explicit user action.
-
----
-
-### `@NEW_SESSION`
-
-> **Archive the current session and start fresh.**
-
-```
-@NEW_SESSION
-```
-
-**Workflow:**
-1. Summarizes current session
-2. Archives session to `context/archive/`
-3. Creates a new session file
-4. Resets conversation context
-5. Confirms: _"New session started. Session `<old-id>` archived."_
-
----
-
-### General Chat (No Command)
-
-Any message without a `@` prefix is treated as a general conversation:
-
-```
-What's the best way to structure a REST API in Express?
-Explain how JWT refresh tokens work.
-```
+Generated changes never auto-apply in chat mode — you review and accept them.
 
 ---
 
 ## 🏗 Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│                   Web Layer                       │
-│   ┌──────────┐  ┌────────────┐  ┌─────────────┐ │
-│   │ Chat UI  │→ │ WebSocket  │→ │ Express API │ │
-│   │  (HBS)   │  │  Server    │  │  Routes     │ │
-│   └──────────┘  └────────────┘  └─────────────┘ │
-└───────────────────────┬──────────────────────────┘
-                        ↓
-┌──────────────────────────────────────────────────┐
-│               Command System                      │
-│   ┌──────────────┐  ┌──────────────────────────┐ │
-│   │ Parser       │→ │ Registry + Handlers      │ │
-│   │ (@COMMAND)   │  │ (7 commands)             │ │
-│   └──────────────┘  └──────────────────────────┘ │
-└───────────────────────┬──────────────────────────┘
-                        ↓
-┌──────────────────────────────────────────────────┐
-│            LangGraph Workflow Engine              │
-│   ┌────────┐ ┌──────┐ ┌─────┐ ┌──────────────┐ │
-│   │Planner │ │Coder │ │Rev. │ │ Approval     │ │
-│   │  Node  │ │ Node │ │Node │ │ (interrupt)  │ │
-│   └────────┘ └──────┘ └─────┘ └──────────────┘ │
-└───────────────────────┬──────────────────────────┘
-                        ↓
-┌──────────────────────────────────────────────────┐
-│              Services + Tools                     │
-│   ┌──────────┐  ┌──────────┐  ┌──────────────┐ │
-│   │Git Service│  │GitHub Svc│  │Context Svc   │ │
-│   │(simple-git)│ │(Octokit) │  │(MD read/write│ │
-│   └──────────┘  └──────────┘  └──────────────┘ │
-└──────────────────────────────────────────────────┘
+Web (Express + Handlebars + SSE)  ─┬─  Chat UI (/app)        ── @commands + conversation
+                                   └─  Folder Agent UI (/folder) ── browse · run · approve
+                     │
+        Command registry / routes / auth middleware
+                     │
+   ┌─────────────────┼───────────────────────────────┐
+   │                 │                                │
+ Agent loop      Folder agent                    LLM layer
+ (LangGraph)     (ReAct + state store)           modelRouter → role chains → failover
+   │                 │                                │
+   └── Services: changeset review · verification (sandboxed) · context · git/github
+   └── Tools: file (staged or direct) · run_command (cwd-locked) · run_check · git · github
+   └── Persistence: Supabase (users/sessions/conversations) · .neurostack/ (runs)
 ```
 
 ---
@@ -331,121 +217,63 @@ Explain how JWT refresh tokens work.
 ## 📁 Project Structure
 
 ```
-project-neurostack/
-├── src/                    # Application source code
-│   ├── index.ts            # Entry point
-│   ├── config/             # Configuration & constants
-│   ├── types/              # TypeScript interfaces (by domain)
-│   ├── enums/              # TypeScript enums (by domain)
-│   ├── errors/             # Custom error class hierarchy
-│   ├── llm/                # LLM abstraction (Gemini, OpenAI)
-│   ├── commands/           # Command parser, registry, handlers
-│   ├── graph/              # LangGraph state, nodes, workflow
-│   ├── services/           # Business logic layer
-│   ├── tools/              # LangChain tool wrappers
-│   ├── memory/             # Markdown context management
-│   ├── logger/             # Winston structured logger
-│   ├── utils/              # Pure utility functions
-│   └── web/                # Express server, routes, views
-├── context/                # Markdown-based persistence
-│   ├── rules/              # System rules (permanent)
-│   ├── commands/           # Command templates (permanent)
-│   ├── agents/             # AI agent guidelines (permanent)
-│   ├── sessions/           # Active sessions (rotatable)
-│   ├── memory/             # Learned patterns (permanent)
-│   ├── workflows/          # Workflow definitions (permanent)
-│   └── archive/            # Archived sessions
-├── public/                 # Static web assets
-├── logs/                   # Runtime logs
-├── workspace/              # Cloned repository
-└── .env                    # Environment configuration
+src/
+  llm/            # provider factories, model router, role chains, agent loop, retry/failover
+  graph/          # LangGraph agent-loop (state, nodes, workflow)
+  services/       # folder agent, state store, workspace, verification, changeset, project indexer, auth…
+  tools/          # file, shell (run_command), verify (run_check), git, github tools
+  commands/       # @command parser, registry, handlers
+  web/            # Express routes (chat, folder, review, auth), middleware, Handlebars views
+  database/       # Supabase client, repositories, SQL migrations
+  memory/         # markdown context (rules, patterns) + prompt injection
+  config/ types/ enums/ errors/ utils/ logger/
+scripts/          # smokeProviders, agentFolder (CLI)
+evals/            # benchmark tasks + harness (npm run eval)
+tests/            # vitest suite
 ```
 
 ---
 
-## 🧠 Context System (Markdown Memory)
+## 🔐 Security
 
-NeuroStack uses structured Markdown files instead of a database:
-
-| Directory | Purpose | Retention |
-|-----------|---------|-----------|
-| `context/rules/` | System identity, anti-hallucination | ♾️ Permanent |
-| `context/commands/` | Command prompt templates | ♾️ Permanent |
-| `context/agents/` | Code generation guidelines | ♾️ Permanent |
-| `context/workflows/` | Workflow definitions | ♾️ Permanent |
-| `context/memory/` | Learned patterns & corrections | ♾️ Permanent |
-| `context/sessions/` | Active session summaries | 1–2 days |
-| `context/archive/` | Archived sessions | 30 days |
-
-### Read Strategy (Per LLM Call)
-Only relevant files are loaded — never all:
-1. `rules/system_rules.md` — Always
-2. `rules/anti_hallucination.md` — Always
-3. `agents/code_generation_guidelines.md` — For code tasks
-4. `commands/<command>.md` — If command detected
-5. `sessions/session_<id>.md` — Current session
-6. `memory/learned_patterns.md` — Last 50 entries
-
-### Write Strategy
-- **Rules/Commands/Agents**: Append-only, never overwritten by AI
-- **Sessions**: Created and updated during use
-- **Memory**: Auto-appended when corrections or patterns are learned
+Signed HMAC session tokens with expiry; bcrypt password hashing; per-user ownership checks on sessions
+and conversations; rate limiting on auth endpoints; security headers; path-traversal guards on all file
+operations; sandboxed verification (checks run on a temp copy, never the real workspace before approval);
+DOMPurify sanitization of rendered model output; scoped, cwd-locked shell execution with a catastrophic-
+command denylist. Supabase RLS is locked down in migration `002`.
 
 ---
 
-## ⏱ Session Management
+## 📜 Scripts
 
-| Behavior | Rule |
-|----------|------|
-| Active window | 1–5 hours (configurable) |
-| Expiry prompt | After window expires, suggest `@NEW_SESSION` |
-| Context retention | 1–2 days after last activity |
-| Pre-delete | Show summary + ask confirmation before deleting |
-| Auto-purge | 3–4 days of no activity → auto-delete |
-| Archive | Completed sessions moved to `context/archive/` |
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` / `start` | Compile / run compiled server |
+| `npm run folder …` | Folder agent CLI (start / resume / status) |
+| `npm test` | Vitest suite |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run eval` | Run the agent-loop benchmark harness |
+| `npm run smoke:providers` | Live-test every model role across providers |
 
----
-
-## 🔐 Governance & Safety Rules
-
-1. **Never auto-merge** — PRs require explicit `@MERGE_PR`
-2. **Never execute destructive actions** without user confirmation
-3. **Always validate** generated code before committing
-4. **Always log** reasoning, actions, and decisions
-5. **Never fabricate** — use tools to read actual files and API data
-6. **Human-in-the-loop** — plans require approval before code generation
+CI (GitHub Actions, `.github/workflows/ci.yml`) runs typecheck + lint + tests on push/PR.
 
 ---
 
 ## 🗺 Roadmap
 
-### Phase 1: Foundation ✅ (Current)
-Core architecture, command system, Git integration, markdown memory, web UI
+**Done:** multi-model routing + failover · staged-review `@AGENT` · autonomous `@AGENT_LOOP` · folder
+agent (CLI + web) · autonomous shell with permission modes · durable `.neurostack/` state + resume ·
+cross-model handoff · project indexing · task decomposition · security hardening · tests + CI.
 
-### Phase 2: Intelligence
-Multi-agent system, vector store, enhanced reviews, SQLite persistence
+**Next:** true FS sandboxing (container) for shell isolation · full dependency-graph task scheduler ·
+richer web status dashboard · remaining PR-lifecycle commands (`@CREATE_PR` → `@MERGE_PR`).
 
-### Phase 3: CI/CD
-GitHub Actions, automated tests, build monitoring, webhooks
-
-### Phase 4: Team
-Slack/Teams integration, RBAC, shared knowledge base, audit trails
-
-### Phase 5: Enterprise
-Multi-tenant, fine-tuning, plugin system, analytics dashboard
-
----
-
-## 🤝 Contributing
-
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Follow the [Code Generation Guidelines](./context/agents/code_generation_guidelines.md)
-4. Commit with conventional commits: `feat:`, `fix:`, `docs:`
-5. Submit a PR
+See [`plans/`](plans/) for detailed design docs and decision history.
 
 ---
 
 ## 📄 License
 
-MIT License — see [LICENSE](./LICENSE) for details.
+MIT — see [LICENSE](./LICENSE).

@@ -1,18 +1,36 @@
 import express from 'express';
 import { changeSetService } from '../../services/changeSetService.js';
+import { findSessionById } from '../../database/sessionRepository.js';
+import { ChangeSet } from '../../types/reviewTypes.js';
 import { createChildLogger } from '../../logger/index.js';
 
 const router = express.Router();
 const log = createChildLogger('reviewRoutes');
 
 /**
- * GET /api/review/:changeSetId
- * Returns a specific changeset
+ * Resolves a changeset only if it belongs to a session owned by the caller.
+ * Returns null (treated as not found) for unknown changesets, foreign
+ * changesets, or changesets whose session no longer exists.
  */
-router.get('/api/review/:changeSetId', (req, res) => {
+async function findOwnedChangeSet(changeSetId: string, userId: string | undefined): Promise<ChangeSet | null> {
+  if (!userId) return null;
+
+  const changeSet = changeSetService.getChangeSet(changeSetId);
+  if (!changeSet) return null;
+
+  const session = await findSessionById(changeSet.sessionId);
+  if (!session || session.userId !== userId) return null;
+
+  return changeSet;
+}
+
+/**
+ * GET /api/review/:changeSetId
+ * Returns a specific changeset (owner only)
+ */
+router.get('/api/review/:changeSetId', async (req, res) => {
   try {
-    const { changeSetId } = req.params;
-    const changeSet = changeSetService.getChangeSet(changeSetId);
+    const changeSet = await findOwnedChangeSet(req.params.changeSetId, req.userId);
 
     if (!changeSet) {
       res.status(404).json({ type: 'error', content: 'ChangeSet not found.' });
@@ -21,8 +39,7 @@ router.get('/api/review/:changeSetId', (req, res) => {
 
     res.json(changeSet);
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error fetching changeset', { source: 'reviewRoutes#getChangeSet', error: message });
     res.status(500).json({ type: 'error', content: 'Internal server error.' });
   }
@@ -30,16 +47,22 @@ router.get('/api/review/:changeSetId', (req, res) => {
 
 /**
  * GET /api/review/session/:sessionId
- * Returns all changesets for a specific session
+ * Returns all changesets for a specific session (owner only)
  */
-router.get('/api/review/session/:sessionId', (req, res) => {
+router.get('/api/review/session/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
+
+    const session = await findSessionById(sessionId);
+    if (!session || session.userId !== req.userId) {
+      res.status(404).json({ type: 'error', content: 'Session not found.' });
+      return;
+    }
+
     const changeSets = changeSetService.listChangeSets(sessionId);
     res.json({ changeSets });
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error listing session changesets', { source: 'reviewRoutes#listSessionChangeSets', error: message });
     res.status(500).json({ type: 'error', content: 'Internal server error.' });
   }
@@ -47,16 +70,20 @@ router.get('/api/review/session/:sessionId', (req, res) => {
 
 /**
  * POST /api/review/:changeSetId/accept
- * Accepts the changeset and writes proposed changes to disk
+ * Accepts the changeset and writes proposed changes to disk (owner only)
  */
 router.post('/api/review/:changeSetId/accept', async (req, res) => {
   try {
-    const { changeSetId } = req.params;
-    await changeSetService.acceptChangeSet(changeSetId);
+    const changeSet = await findOwnedChangeSet(req.params.changeSetId, req.userId);
+    if (!changeSet) {
+      res.status(404).json({ type: 'error', content: 'ChangeSet not found.' });
+      return;
+    }
+
+    await changeSetService.acceptChangeSet(changeSet.changeSetId);
     res.json({ status: 'success', message: 'Changes applied.' });
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error accepting changeset', { source: 'reviewRoutes#acceptChangeSet', error: message });
     res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
@@ -64,16 +91,20 @@ router.post('/api/review/:changeSetId/accept', async (req, res) => {
 
 /**
  * POST /api/review/:changeSetId/reject
- * Rejects the changeset
+ * Rejects the changeset (owner only)
  */
 router.post('/api/review/:changeSetId/reject', async (req, res) => {
   try {
-    const { changeSetId } = req.params;
-    await changeSetService.rejectChangeSet(changeSetId);
+    const changeSet = await findOwnedChangeSet(req.params.changeSetId, req.userId);
+    if (!changeSet) {
+      res.status(404).json({ type: 'error', content: 'ChangeSet not found.' });
+      return;
+    }
+
+    await changeSetService.rejectChangeSet(changeSet.changeSetId);
     res.json({ status: 'success', message: 'Changes rejected.' });
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error rejecting changeset', { source: 'reviewRoutes#rejectChangeSet', error: message });
     res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
@@ -81,12 +112,11 @@ router.post('/api/review/:changeSetId/reject', async (req, res) => {
 
 /**
  * POST /api/review/:changeSetId/comment
- * Adds an inline comment to a changeset
+ * Adds an inline comment to a changeset (owner only)
  * Body: { fileIndex: number, lineNumber: number, content: string }
  */
 router.post('/api/review/:changeSetId/comment', async (req, res) => {
   try {
-    const { changeSetId } = req.params;
     const { fileIndex, lineNumber, content } = req.body;
 
     if (fileIndex == null || lineNumber == null || !content) {
@@ -94,11 +124,16 @@ router.post('/api/review/:changeSetId/comment', async (req, res) => {
       return;
     }
 
-    const comment = await changeSetService.addComment(changeSetId, fileIndex, lineNumber, content);
+    const changeSet = await findOwnedChangeSet(req.params.changeSetId, req.userId);
+    if (!changeSet) {
+      res.status(404).json({ type: 'error', content: 'ChangeSet not found.' });
+      return;
+    }
+
+    const comment = await changeSetService.addComment(changeSet.changeSetId, fileIndex, lineNumber, content);
     res.json({ status: 'success', comment });
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error adding comment', { source: 'reviewRoutes#addComment', error: message });
     res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }
@@ -106,12 +141,11 @@ router.post('/api/review/:changeSetId/comment', async (req, res) => {
 
 /**
  * POST /api/review/:changeSetId/revise
- * Requests a revision for the changeset with overall feedback
+ * Requests a revision for the changeset with overall feedback (owner only)
  * Body: { feedback: string }
  */
 router.post('/api/review/:changeSetId/revise', async (req, res) => {
   try {
-    const { changeSetId } = req.params;
     const { feedback } = req.body;
 
     if (!feedback) {
@@ -119,15 +153,20 @@ router.post('/api/review/:changeSetId/revise', async (req, res) => {
       return;
     }
 
-    await changeSetService.requestRevision(changeSetId, feedback);
+    const changeSet = await findOwnedChangeSet(req.params.changeSetId, req.userId);
+    if (!changeSet) {
+      res.status(404).json({ type: 'error', content: 'ChangeSet not found.' });
+      return;
+    }
+
+    await changeSetService.requestRevision(changeSet.changeSetId, feedback);
 
     // Call RevisionService in the future
     // await revisionService.processRevision(changeSetId, feedback, req.body.sessionId);
 
     res.json({ status: 'success', message: 'Revision requested.' });
   } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
+    const message = error instanceof Error ? error.message : String(error);
     log.error('Error requesting revision', { source: 'reviewRoutes#requestRevision', error: message });
     res.status(500).json({ type: 'error', content: message || 'Internal server error.' });
   }

@@ -3,10 +3,10 @@ import { CommandArgs, CommandHandler, CommandResult } from '../../types/commandT
 import { CommandName } from '../../enums/commandEnum.js';
 import { AssembledContext, ContextService } from '../../services/contextService.js';
 import { PromptInjector } from '../../memory/promptInjector.js';
-import { createLLMProvider } from '../../llm/provider.js';
-import { config } from '../../config/index.js';
+import { runAgentLoop } from '../../llm/agentLoop.js';
+import { ALL_FILE_TOOLS } from '../../tools/fileTools.js';
 import { createChildLogger } from '../../logger/index.js';
-import { AGENT_USAGE_GUIDE, AGENT_COMMAND_DESCRIPTION } from '../../constants/commandConstants.js';
+import { AGENT_USAGE_GUIDE, AGENT_COMMAND_DESCRIPTION, AGENT_TOOL_GUIDANCE } from '../../constants/commandConstants.js';
 import { changeSetService } from '../../services/changeSetService.js';
 import { changeSetContext } from '../../services/changeSetContext.js';
 import { FileChangeStatus } from '../../enums/reviewEnum.js';
@@ -115,9 +115,10 @@ export class AgentHandler implements CommandHandler {
       // Create a pending changeset for this agent session
       const changeSet = await changeSetService.createChangeSet(sessionId);
 
-      // Invoke LLM within the async context so file tools can associate writes
+      // Run the tool loop within the async context so file tools stage writes
+      // into this changeset
       const content = await changeSetContext.run(changeSet.changeSetId, async () => {
-        return await this.invokeLLM(messages, sessionId);
+        return await this.runToolLoop(messages, sessionId);
       });
 
       // Finalize the changeset since execution is over
@@ -170,7 +171,7 @@ export class AgentHandler implements CommandHandler {
    */
   private buildMessages(context: AssembledContext, requirement: string): BaseMessage[] {
     return this.promptInjector.buildPrompt(
-      context.systemRules,
+      `${context.systemRules}\n\n${AGENT_TOOL_GUIDANCE}`,
       context.commandTemplate,
       context.sessionContext,
       context.learnedPatterns,
@@ -179,35 +180,36 @@ export class AgentHandler implements CommandHandler {
   }
 
   /**
-   * Invokes the configured LLM with the assembled message array and returns raw text content.
+   * Runs the ReAct tool loop with the workspace file tools bound to the CODER
+   * model. The loop retries transient provider failures and compresses its own
+   * transcript; file writes are staged into the active changeset by the tools.
    *
    * @param messages  - Fully assembled LangChain message array.
-   * @param sessionId - Used for structured logging of provider/model/duration.
-   * @returns The LLM's response as a plain string.
-   * @throws Re-throws any error from the LLM provider so the caller can handle it uniformly.
+   * @param sessionId - Used for structured logging.
+   * @returns The agent's final response as a plain string.
+   * @throws Re-throws any error from the loop so the caller can handle it uniformly.
    */
-  private async invokeLLM(messages: BaseMessage[], sessionId: string): Promise<string> {
-    log.info('Invoking LLM for AGENT command', {
-      source: 'agentHandler#invokeLLM',
+  private async runToolLoop(messages: BaseMessage[], sessionId: string): Promise<string> {
+    log.info('Starting agent tool loop', {
+      source: 'agentHandler#runToolLoop',
       sessionId,
-      provider: config.llm.provider,
-      model: config.llm.model,
       messageCount: messages.length,
     });
 
-    const llmStartTime = Date.now();
-    const llm = createLLMProvider(config.llm);
-    const response = await llm.invoke(messages);
+    const loopStartTime = Date.now();
+    const result = await runAgentLoop(messages, ALL_FILE_TOOLS);
 
-    log.info('LLM response received for AGENT command', {
-      source: 'agentHandler#invokeLLM',
+    log.info('Agent tool loop finished', {
+      source: 'agentHandler#runToolLoop',
       sessionId,
-      llmDurationMs: Date.now() - llmStartTime,
+      rounds: result.rounds,
+      toolCallCount: result.toolCallCount,
+      compressed: result.compressed,
+      hitRoundCap: result.hitRoundCap,
+      durationMs: Date.now() - loopStartTime,
     });
 
-    return typeof response.content === 'string'
-      ? response.content
-      : JSON.stringify(response.content);
+    return result.content;
   }
 
   /**

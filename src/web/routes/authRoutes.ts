@@ -1,15 +1,26 @@
 import express from 'express';
-import { registerUser, loginUser, validateToken } from '../../services/authService.js';
+import { registerUser, loginUser } from '../../services/authService.js';
+import { findUserById } from '../../database/userRepository.js';
+import { config } from '../../config/index.js';
 import { createChildLogger } from '../../logger/index.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 const log = createChildLogger('authRoutes');
+
+// Brute-force protection for credential endpoints
+const authLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, name: 'auth' });
+
+function authCookie(token: string): string {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `neurostack_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${config.auth.tokenTtlSeconds}${secure}`;
+}
 
 /**
  * POST /api/auth/register
  * Body: { username: string, password: string }
  */
-router.post('/api/auth/register', async (req, res) => {
+router.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -26,7 +37,7 @@ router.post('/api/auth/register', async (req, res) => {
     const result = await registerUser(username, password);
 
     if (result.success && result.token) {
-      res.setHeader('Set-Cookie', `neurostack_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
+      res.setHeader('Set-Cookie', authCookie(result.token));
     }
 
     const status = result.success ? 201 : 409;
@@ -42,7 +53,7 @@ router.post('/api/auth/register', async (req, res) => {
  * POST /api/auth/login
  * Body: { username: string, password: string }
  */
-router.post('/api/auth/login', async (req, res) => {
+router.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -54,7 +65,7 @@ router.post('/api/auth/login', async (req, res) => {
     const result = await loginUser(username, password);
 
     if (result.success && result.token) {
-      res.setHeader('Set-Cookie', `neurostack_token=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
+      res.setHeader('Set-Cookie', authCookie(result.token));
     }
 
     const status = result.success ? 200 : 401;
@@ -77,26 +88,22 @@ router.post('/api/auth/logout', (_req, res) => {
 /**
  * GET /api/auth/me
  * Returns the current authenticated user info.
+ * authMiddleware has already validated the token and set req.userId.
  */
 router.get('/api/auth/me', async (req, res) => {
   try {
-    const token =
-      (req.headers.cookie?.split(';').find((c) => c.trim().startsWith('neurostack_token='))
-        ?.split('=')[1]?.trim()) ||
-      req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
+    if (!req.userId) {
       res.status(401).json({ success: false, message: 'Not authenticated.' });
       return;
     }
 
-    const result = await validateToken(token);
-    if (!result.success) {
-      res.status(401).json(result);
+    const user = await findUserById(req.userId);
+    if (!user) {
+      res.status(401).json({ success: false, message: 'Not authenticated.' });
       return;
     }
 
-    res.json({ success: true, user: result.user });
+    res.json({ success: true, user });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     log.error('Me endpoint error', { source: 'authRoutes#me', error: message });

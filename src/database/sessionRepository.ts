@@ -95,6 +95,25 @@ export async function updateSession(
 }
 
 /**
+ * Sets a session's title only if it has not been set yet.
+ * The conditional update is atomic — no read-then-write race when
+ * multiple "first" messages arrive concurrently.
+ */
+export async function setSessionTitleIfEmpty(sessionId: string, title: string): Promise<void> {
+  const supabase = getSupabaseClient();
+
+  const { error } = await supabase
+    .from('sessions')
+    .update({ title, last_active_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .is('title', null);
+
+  if (error) {
+    log.error('Failed to set session title', { source: 'sessionRepository#setSessionTitleIfEmpty', error: error.message });
+  }
+}
+
+/**
  * Touch the session's last_active_at timestamp.
  */
 export async function touchSession(sessionId: string): Promise<void> {

@@ -2,9 +2,9 @@ import path from 'path';
 import { fileExists, readJson, writeJson, ensureDirectory } from '../utils/fileUtil.js';
 import { Session } from '../types/sessionTypes.js';
 import { SessionStatus } from '../enums/sessionEnum.js';
+import { v4 as uuidv4 } from 'uuid';
 import { getFutureDateByHours } from '../utils/dateUtil.js';
 import { config } from '../config/index.js';
-import { generateId } from '../utils/stringUtil.js';
 import { createChildLogger } from '../logger/index.js';
 
 const log = createChildLogger('sessionManager');
@@ -15,7 +15,7 @@ export class SessionManager {
   }
 
   public async createSession(): Promise<Session> {
-    const sessionId = generateId();
+    const sessionId = uuidv4();
     const now = new Date();
     
     log.info('Creating new session instance', { source: 'sessionManager#createSession', sessionId });

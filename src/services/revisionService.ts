@@ -1,6 +1,5 @@
 import { changeSetService } from './changeSetService.js';
 import { createChildLogger } from '../logger/index.js';
-import { changeSetContext } from './changeSetContext.js';
 
 const log = createChildLogger('revisionService');
 

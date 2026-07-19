@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { engine } from 'express-handlebars';
@@ -8,6 +8,7 @@ import router from './web/routes/index.js';
 import { commandRegistry, NewSessionHandler, AgentHandler } from './commands/index.js';
 import { changeSetService } from './services/changeSetService.js';
 import { authMiddleware } from './web/middleware/authMiddleware.js';
+import { securityHeaders } from './web/middleware/securityHeaders.js';
 import { checkSupabaseConnection } from './database/supabaseClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,14 +48,40 @@ async function bootstrap() {
 
   // Middleware
   log.debug('Mounting middleware', { source: 'index#bootstrap' });
-  app.use(express.static('public'));
-  app.use(express.json());
+  app.use(securityHeaders);
+  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(express.json({ limit: '256kb' }));
 
   // Auth middleware — gates all routes except public paths
   app.use(authMiddleware);
 
   // Routes (view + API)
   app.use(router);
+
+  // 404 — JSON for API paths, redirect for views
+  app.use((req: Request, res: Response) => {
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ type: 'error', content: 'Not found.' });
+    } else {
+      res.redirect('/app');
+    }
+  });
+
+  // Central error handler — last resort so no error leaks a stack to clients
+  app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+    log.error('Unhandled request error', {
+      source: 'index#errorHandler',
+      path: req.path,
+      error: err.message,
+      stack: err.stack,
+    });
+    if (res.headersSent) return;
+    if (req.path.startsWith('/api/')) {
+      res.status(500).json({ type: 'error', content: 'Internal server error.' });
+    } else {
+      res.status(500).send('Internal server error.');
+    }
+  });
 
   app.listen(config.server.port, () => {
     log.info(`Server running on http://${config.server.host}:${config.server.port}`, { source: 'index#bootstrap' });

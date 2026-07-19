@@ -1127,3 +1127,28 @@ body {
     font-size: 1.4rem;
   }
 }
+
+/* ── Agent Loop progress panel ── */
+.loop-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.loop-status {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  text-transform: lowercase;
+}
+.loop-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loop-steps li {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  opacity: 0.92;
+}

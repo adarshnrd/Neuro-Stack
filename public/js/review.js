@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
           comments.forEach(c => {
             const commentRow = document.createElement('div');
             commentRow.className = 'diff-comment-row';
-            commentRow.innerHTML = `<strong>${c.author}</strong> <small>${new Date(c.timestamp).toLocaleString()}</small><p>${c.content}</p>`;
+            commentRow.innerHTML = `<strong>${escapeHtml(c.author)}</strong> <small>${new Date(c.timestamp).toLocaleString()}</small><p>${escapeHtml(c.content)}</p>`;
             diffContent.appendChild(commentRow);
           });
         }
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
           comments.forEach(c => {
             const commentRow = document.createElement('div');
             commentRow.className = 'diff-comment-row';
-            commentRow.innerHTML = `<strong>${c.author}</strong> <small>${new Date(c.timestamp).toLocaleString()}</small><p>${c.content}</p>`;
+            commentRow.innerHTML = `<strong>${escapeHtml(c.author)}</strong> <small>${new Date(c.timestamp).toLocaleString()}</small><p>${escapeHtml(c.content)}</p>`;
             diffContent.appendChild(commentRow);
           });
         }

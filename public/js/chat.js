@@ -15,12 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const welcomeScreen      = document.getElementById('welcome-screen');
   const sidebarToggle      = document.getElementById('sidebar-toggle');
   const sidebar            = document.getElementById('sidebar');
+  const newSessionBtn      = document.getElementById('new-session-btn');
 
   // ── State ──
-  let sessionId          = null;
-  let availableCommands  = [];
-  let selectedCommandIdx = -1;
-  let isSending          = false;
+  let sessionId            = null;
+  let availableCommands    = [];
+  let selectedCommandIdx   = -1;
+  let isSending            = false;
+  let isNewSessionPending  = false;
 
   // ── Pagination state ──
   let oldestCursor       = null;
@@ -31,21 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentUser        = null;
 
   // ── Configure marked.js ──
+  // (Code highlighting happens in processCodeBlocks — the `highlight` option
+  // was removed from marked in v5 and would be silently ignored.)
   if (window.marked) {
     window.marked.setOptions({
       breaks: true,
       gfm: true,
-      highlight: (code, lang) => {
-        if (window.hljs && lang && window.hljs.getLanguage(lang)) {
-          try { return window.hljs.highlight(code, { language: lang }).value; }
-          catch (_) { /* fall through */ }
-        }
-        if (window.hljs) {
-          try { return window.hljs.highlightAuto(code).value; }
-          catch (_) { /* fall through */ }
-        }
-        return code;
-      },
     });
   }
 
@@ -53,6 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setStatus('ready', 'Ready');
   fetchCommands();
   checkAuth();
+
+  // ── New Session button (static button from template) ──
+  newSessionBtn?.addEventListener('click', createNewSession);
 
   // ── Sidebar toggle ──
   sidebarToggle?.addEventListener('click', () => {
@@ -101,10 +97,11 @@ document.addEventListener('DOMContentLoaded', () => {
         currentUser = data.user;
         renderUserInfo();
         loadSessions();
+      } else {
+        window.location.href = '/signin';
       }
-      // If not authenticated in dev mode, still allow usage
     } catch (_) {
-      // Auth check failed — may be dev mode, continue
+      window.location.href = '/signin';
     }
   }
 
@@ -122,23 +119,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+    window.location.href = '/signin';
   }
 
   // ═══════════════════════════════════════════════
   //  SESSIONS
   // ═══════════════════════════════════════════════
 
-  async function loadSessions() {
+  async function loadSessions(skipAutoSelect = false) {
     try {
       const res = await fetch('/api/sessions');
       const data = await res.json();
       const sessions = data.sessions || [];
       renderSessionList(sessions);
-      
-      if (!sessionId && sessions.length > 0) {
+
+      // Only auto-select the latest session on initial page load.
+      // Skip when: user is composing a new session, or caller explicitly requested skip.
+      if (!skipAutoSelect && !isNewSessionPending && sessionId === null && sessions.length > 0) {
         await switchSession(sessions[0].id);
-      } else if (!sessionId) {
+      } else if (!skipAutoSelect && !isNewSessionPending && sessionId === null) {
         showWelcomeScreen();
       }
     } catch (err) {
@@ -151,13 +150,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!listEl) return;
 
     listEl.innerHTML = '';
-
-    // New Chat button
-    const newBtn = document.createElement('button');
-    newBtn.className = 'session-item new-session-btn';
-    newBtn.innerHTML = '<span>＋</span> New Chat';
-    newBtn.addEventListener('click', createNewSession);
-    listEl.appendChild(newBtn);
 
     // Session items
     sessions.forEach((s) => {
@@ -179,29 +171,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function createNewSession() {
+  /**
+   * Resets the UI to a fresh "new session" state.
+   * The actual DB session is created lazily when the user sends their first message.
+   */
+  function createNewSession() {
     if (!currentUser) return;
 
-    try {
-      const res = await fetch('/api/sessions', { method: 'POST' });
-      const data = await res.json();
-      if (data.session) {
-        sessionId = data.session.id;
-        messagesContainer.innerHTML = '';
-        oldestCursor = null;
-        hasMoreMessages = false;
-        showWelcomeScreen();
-        loadSessions();
-      }
-    } catch (err) {
-      console.error('Failed to create session', err);
-    }
+    // Reset client state — no DB session yet
+    sessionId = null;
+    isNewSessionPending = true;
+    messagesContainer.innerHTML = '';
+    oldestCursor = null;
+    hasMoreMessages = false;
+
+    showWelcomeScreen();
+    updateSessionHeaderTitle('New Session');
+
+    // Remove active highlight from all sidebar sessions
+    document.querySelectorAll('.session-item').forEach((el) => {
+      el.classList.remove('active');
+    });
   }
 
   async function switchSession(newSessionId) {
     if (newSessionId === sessionId) return;
 
     sessionId = newSessionId;
+    isNewSessionPending = false;
     messagesContainer.innerHTML = '';
     oldestCursor = null;
     hasMoreMessages = false;
@@ -218,6 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.session-item').forEach((el) => {
       el.classList.toggle('active', el.dataset?.sessionId === sessionId);
     });
+
+    // Update header title from the active session item
+    const activeItem = document.querySelector(`.session-item[data-session-id="${sessionId}"]`);
+    const title = activeItem?.querySelector('.session-title')?.textContent || 'Chat';
+    updateSessionHeaderTitle(title);
   }
 
   async function loadConversationHistory() {
@@ -297,6 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.classList.remove('active');
   }
 
+  /** Updates the header title in the chat area */
+  function updateSessionHeaderTitle(title) {
+    const headerTitle = document.querySelector('.chat-header .header-left h3');
+    if (headerTitle) headerTitle.textContent = title;
+  }
+
   // ═══════════════════════════════════════════════
   //  STATUS
   // ═══════════════════════════════════════════════
@@ -330,14 +338,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = inputEl.value.trim();
     if (!text || isSending) return;
 
-    // Auto-create session if none exists
+    // Lazily create DB session on first message (deferred from "New Session" click)
     if (!sessionId && currentUser) {
       try {
         const res = await fetch('/api/sessions', { method: 'POST' });
         const data = await res.json();
         if (data.session) {
           sessionId = data.session.id;
-          loadSessions(); // Refresh sidebar
+          isNewSessionPending = false;
         }
       } catch (err) {
         console.error('Failed to auto-create session', err);
@@ -357,6 +365,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show typing
     const typingRow = showTypingIndicator();
 
+    // ── Agent loop branch: @AGENT_LOOP streams multi-iteration progress ──
+    const loopMatch = text.match(/^@AGENT_LOOP\s+([\s\S]+)/i);
+    if (loopMatch) {
+      removeTypingIndicator(typingRow);
+      try {
+        await streamAgentLoop(loopMatch[1].trim());
+        loadSessions(true);
+      } catch (err) {
+        await appendAIMessage('Agent loop failed to start. Please try again.', 'error');
+      } finally {
+        isSending = false;
+        inputEl.focus();
+      }
+      return;
+    }
+
     try {
       setStatus('thinking', 'Thinking...');
 
@@ -375,9 +399,9 @@ document.addEventListener('DOMContentLoaded', () => {
       await appendAIMessage(data.content, type, data);
 
       setStatus('ready', 'Ready');
-      
-      // Refresh session list to show new title or latest timestamp
-      loadSessions();
+
+      // Refresh sidebar to show new/updated session title — skip auto-select
+      loadSessions(true);
     } catch (err) {
       removeTypingIndicator(typingRow);
       await appendAIMessage('Failed to reach the server. Please try again.', 'error');
@@ -385,6 +409,125 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       isSending = false;
       inputEl.focus();
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  //  AGENT LOOP (SSE streaming)
+  // ═══════════════════════════════════════════════
+
+  /**
+   * Runs an autonomous agent loop and renders live progress from the SSE stream.
+   * Each event updates a single progress panel; the final result appends a
+   * summary and (if changes were staged) a review button.
+   */
+  async function streamAgentLoop(requirement) {
+    setStatus('thinking', 'Running agent loop…');
+
+    // Progress panel
+    const row = document.createElement('div');
+    row.classList.add('message-row', 'neurostack');
+    row.innerHTML = `
+      <div class="msg-avatar neurostack">🔁</div>
+      <div class="msg-content">
+        <div class="msg-bubble">
+          <div class="loop-header"><strong>Agent Loop</strong> <span class="loop-status">starting…</span></div>
+          <ol class="loop-steps"></ol>
+        </div>
+      </div>`;
+    messagesContainer.appendChild(row);
+    scrollToBottom();
+
+    const stepsEl = row.querySelector('.loop-steps');
+    const statusLabel = row.querySelector('.loop-status');
+    const addStep = (label) => {
+      const li = document.createElement('li');
+      li.textContent = label;
+      stepsEl.appendChild(li);
+      scrollToBottom();
+      return li;
+    };
+
+    const res = await fetch('/api/loop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requirement, sessionId, autoApprove: true }),
+    });
+
+    if (!res.ok || !res.body) {
+      statusLabel.textContent = 'failed to start';
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() || '';
+      for (const frame of frames) {
+        const line = frame.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (evt.type === 'result') {
+          finalResult = evt.result;
+          continue;
+        }
+        renderLoopEvent(evt, addStep, statusLabel);
+      }
+    }
+
+    // Final summary
+    if (finalResult) {
+      statusLabel.textContent = finalResult.stopReason;
+      const met = finalResult.metCriteria?.length || 0;
+      const total = met + (finalResult.unmetCriteria?.length || 0);
+      await appendAIMessage(
+        `**Loop finished — ${finalResult.stopReason}.** Criteria met: ${met}/${total}.\n\n${finalResult.summary || ''}`,
+        'neurostack',
+        finalResult.changeSetId ? { changeSetId: finalResult.changeSetId } : null,
+        false,
+      );
+    }
+    setStatus('ready', 'Ready');
+  }
+
+  function renderLoopEvent(evt, addStep, statusLabel) {
+    switch (evt.type) {
+      case 'plan':
+        statusLabel.textContent = 'planning';
+        addStep('📋 Plan created');
+        break;
+      case 'iteration':
+        statusLabel.textContent = `iteration ${evt.iteration || ''}`.trim();
+        addStep(`⚙️ ${evt.message}`);
+        break;
+      case 'node':
+        if (evt.node === 'verify') addStep(`🔍 ${evt.message}`);
+        else if (evt.node === 'review') addStep(`🧐 ${evt.message}`);
+        else if (evt.node === 'finalize') addStep(`🏁 ${evt.message}`);
+        break;
+      case 'verdict':
+        addStep(`⚖️ ${evt.message}`);
+        break;
+      case 'awaiting_approval':
+        statusLabel.textContent = 'awaiting approval';
+        addStep('⏸️ Awaiting plan approval');
+        break;
+      case 'error':
+        statusLabel.textContent = 'error';
+        addStep(`⚠️ ${evt.message}`);
+        break;
+      default:
+        break;
     }
   }
 
@@ -528,11 +671,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /** Render markdown with marked.js or fallback to escaped HTML */
+  /**
+   * Render markdown with marked.js, sanitized with DOMPurify.
+   * Model output is untrusted — it can contain raw HTML (prompt injection),
+   * so anything that cannot be sanitized falls back to escaped text.
+   */
   function renderMarkdown(text) {
-    if (window.marked) {
+    if (window.marked && window.DOMPurify) {
       try {
-        return window.marked.parse(text);
+        return window.DOMPurify.sanitize(window.marked.parse(text));
       } catch (e) {
         console.error('Markdown parse error', e);
       }
@@ -697,10 +844,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const item = document.createElement('div');
       item.classList.add('command-item');
       item.dataset.index = idx;
-      item.innerHTML = `
-        <span class="command-trigger">${cmd.trigger}</span>
-        <span class="command-desc">${cmd.description || 'No description available'}</span>
-      `;
+
+      const trigger = document.createElement('span');
+      trigger.className = 'command-trigger';
+      trigger.textContent = cmd.trigger;
+
+      const desc = document.createElement('span');
+      desc.className = 'command-desc';
+      desc.textContent = cmd.description || 'No description available';
+
+      item.append(trigger, desc);
       item.addEventListener('click', () => insertCommand(cmd));
       item.addEventListener('mouseenter', () => {
         selectedCommandIdx = idx;

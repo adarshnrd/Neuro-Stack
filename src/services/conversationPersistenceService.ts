@@ -1,8 +1,6 @@
 import { insertConversation } from '../database/conversationRepository.js';
-import { updateSession } from '../database/sessionRepository.js';
 import { ChatResult } from '../types/chatTypes.js';
 import { createChildLogger } from '../logger/index.js';
-import { truncateText } from '../utils/stringUtil.js';
 import { ConversationRole } from '../enums/conversationEnum.js';
 
 const log = createChildLogger('conversationPersistenceService');
@@ -20,7 +18,6 @@ export async function recordExchange(
   userId: string,
   userMessage: string,
   response: ChatResult,
-  isFirstMessage: boolean = false,
 ): Promise<void> {
   try {
     // 1. Persist the user message
@@ -49,17 +46,6 @@ export async function recordExchange(
       responseType: response.type,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     });
-
-    // 3. If this is the first message, update session title
-    if (isFirstMessage) {
-      const title = truncateText(userMessage, 50);
-      await updateSession(sessionId, { title });
-      log.debug('Session title set from first message', {
-        source: 'conversationPersistenceService#recordExchange',
-        sessionId,
-        title,
-      });
-    }
 
     log.debug('Exchange recorded', {
       source: 'conversationPersistenceService#recordExchange',

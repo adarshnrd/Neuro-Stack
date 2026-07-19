@@ -4,3 +4,4 @@ export const SESSION_AUTO_PURGE_DAYS = 4;
 export const CONTEXT_MAX_FILE_SIZE_KB = 500;
 export const ARCHIVE_RETENTION_DAYS = 30;
 export const LEARNED_PATTERNS_MAX_ENTRIES = 200;
+export const AUTH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days

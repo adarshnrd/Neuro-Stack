@@ -1,6 +1,5 @@
 import express from 'express';
 import { handleChatMessage } from '../../services/chatService.js';
-import { CommandName } from '../../enums/commandEnum.js';
 import { commandRegistry } from '../../commands/registry.js';
 import { createChildLogger, withQueryId } from '../../logger/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,11 +9,17 @@ import {
   listSessionsByUser,
   findSessionById,
   touchSession,
+  setSessionTitleIfEmpty,
 } from '../../database/sessionRepository.js';
-import { getConversationsPaginated, getConversationCount } from '../../database/conversationRepository.js';
+import { getConversationsPaginated } from '../../database/conversationRepository.js';
+import { truncateText } from '../../utils/stringUtil.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 const log = createChildLogger('apiRoutes');
+
+// Each chat message costs an LLM call — cap per-client throughput
+const chatLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, name: 'chat' });
 
 /**
  * Health check
@@ -32,7 +37,7 @@ router.get('/api/health', (req, res) => {
  * The core handleChatMessage() call is UNTOUCHED.
  * Conversation persistence is added as a non-blocking side-effect after the response.
  */
-router.post('/api/chat', async (req, res) => {
+router.post('/api/chat', chatLimiter, async (req, res) => {
   const queryId = uuidv4();
   const traceLog = withQueryId(log, queryId);
   const startTime = Date.now();
@@ -46,14 +51,24 @@ router.post('/api/chat', async (req, res) => {
       return;
     }
 
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ type: 'error', content: 'Authentication required.' });
+      return;
+    }
+
     let sid = sessionId;
-    if (!sid) {
-      if (req.userId) {
-        const newSession = await createDbSession(req.userId);
-        sid = newSession.id;
-      } else {
-        sid = uuidv4();
+    if (sid) {
+      // Never trust a client-supplied session ID — it must belong to the caller
+      const session = await findSessionById(sid);
+      if (!session || session.userId !== userId) {
+        traceLog.warn('Rejected chat for unknown or foreign session', { source: 'apiRoutes#postChat', sessionId: sid });
+        res.status(404).json({ type: 'error', content: 'Session not found.' });
+        return;
       }
+    } else {
+      const newSession = await createDbSession(userId);
+      sid = newSession.id;
     }
 
     traceLog.info('Chat request received', { 
@@ -74,24 +89,22 @@ router.post('/api/chat', async (req, res) => {
       durationMs
     });
 
-    // ── NEW: Persist conversation exchange (non-blocking) ──────────────────────
-    const userId = req.userId;
-    if (userId && sid) {
-      // Determine if this is the first message in the session
-      const msgCount = await getConversationCount(sid);
-      const isFirst = msgCount === 0;
+    // ── Persist conversation exchange ─────────────────────────────────────────
+    // First message names the session. The conditional update only fires while
+    // the title is still empty, so concurrent messages cannot clobber it.
+    // Awaited so the client sees the title when it refreshes the sidebar.
+    await setSessionTitleIfEmpty(sid, truncateText(message, 50));
 
-      // Fire-and-forget: don't await this to avoid slowing the response
-      recordExchange(sid, userId, message, result, isFirst).catch((err) => {
-        traceLog.error('Background persist failed', {
-          source: 'apiRoutes#postChat',
-          error: err instanceof Error ? err.message : String(err),
-        });
+    // Fire-and-forget: persist conversation rows without blocking the response.
+    recordExchange(sid, userId, message, result).catch((err) => {
+      traceLog.error('Background persist failed', {
+        source: 'apiRoutes#postChat',
+        error: err instanceof Error ? err.message : String(err),
       });
+    });
 
-      // Touch session timestamp
-      touchSession(sid).catch(() => { /* silent */ });
-    }
+    // Touch session timestamp
+    touchSession(sid).catch(() => { /* silent */ });
 
     res.json({ ...result, sessionId: sid });
   } catch (error: unknown) {
@@ -112,17 +125,13 @@ router.post('/api/chat', async (req, res) => {
  */
 router.get('/api/commands', (req, res) => {
   log.debug('Commands list requested', { source: 'apiRoutes#getCommands' });
-  const registeredHandlers = commandRegistry.listAll();
 
-  // Build list from all enum values, enriched with handler descriptions
-  const commands = Object.values(CommandName).map((name) => {
-    const handler = registeredHandlers.find((h) => h.name === name);
-    return {
-      name,
-      trigger: `@${name}`,
-      description: handler?.description ?? '',
-    };
-  });
+  // Only advertise commands that actually have a registered handler
+  const commands = commandRegistry.listAll().map((handler) => ({
+    name: handler.name,
+    trigger: `@${handler.name}`,
+    description: handler.description,
+  }));
 
   res.json({ commands });
 });
@@ -176,12 +185,12 @@ router.post('/api/sessions', async (req, res) => {
 
 /**
  * GET /api/sessions/:sessionId
- * Returns a single session by ID.
+ * Returns a single session by ID. Only the owner may read it.
  */
 router.get('/api/sessions/:sessionId', async (req, res) => {
   try {
     const session = await findSessionById(req.params.sessionId);
-    if (!session) {
+    if (!session || session.userId !== req.userId) {
       res.status(404).json({ type: 'error', content: 'Session not found.' });
       return;
     }
@@ -195,14 +204,20 @@ router.get('/api/sessions/:sessionId', async (req, res) => {
 
 /**
  * GET /api/sessions/:sessionId/conversations
- * Paginated conversation history for a session.
- * Query params: cursor (uuid, optional), limit (number, default 10)
+ * Paginated conversation history for a session. Only the owner may read it.
+ * Query params: cursor (uuid, optional), limit (number, default 10, max 100)
  */
 router.get('/api/sessions/:sessionId/conversations', async (req, res) => {
   try {
     const { sessionId } = req.params;
     const cursor = req.query.cursor as string | undefined;
-    const limit = parseInt(req.query.limit as string || '10', 10);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string || '10', 10) || 10, 1), 100);
+
+    const session = await findSessionById(sessionId);
+    if (!session || session.userId !== req.userId) {
+      res.status(404).json({ type: 'error', content: 'Session not found.' });
+      return;
+    }
 
     const result = await getConversationsPaginated(sessionId, limit, cursor);
     res.json(result);

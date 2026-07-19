@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Project NeuroStack is an **AI-powered Git workflow assistant** built on **Express 4**, **TypeScript (strict)**, **LangChain**, **LangGraph**, and **Google Gemini**. It accepts natural language and structured `@commands` via a chat UI (Handlebars + WebSocket), orchestrates multi-step workflows through a stateful LangGraph engine, manages Git operations via `simple-git` and GitHub via `Octokit`, and persists all context and memory as structured Markdown files (no database).
+Project NeuroStack is an **autonomous, multi-model AI development agent** built on **Express 4**, **TypeScript (strict)**, **LangChain**, and **LangGraph**, with a role-based router over **Google Gemini, Groq, and NVIDIA NIM** (with automatic cross-provider failover). It accepts natural language and structured `@commands` via a chat UI (Handlebars + Server-Sent Events), and can operate directly inside a selected local folder (the "folder agent") — reading/writing files and running terminal commands in an autonomous loop until a task is complete, handing off across models on exhaustion and checkpointing progress to a filesystem `.neurostack/` state store for resumability. It manages Git via `simple-git` and GitHub via `Octokit`, persists users/sessions/conversations in **Supabase (Postgres)**, and keeps system rules and learned patterns as Markdown context. Note: the automated agent loop never touches version control — git is manual/opt-in only.
 
 ---
 

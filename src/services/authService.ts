@@ -3,9 +3,15 @@ import { createUser, findUserByUsername, findUserById, getUserCount } from '../d
 import { UserRole } from '../enums/authEnum.js';
 import { AuthResult } from '../types/authTypes.js';
 import { createChildLogger } from '../logger/index.js';
+import { createSignedToken, verifySignedToken } from '../utils/tokenUtil.js';
+import { config } from '../config/index.js';
 
 const log = createChildLogger('authService');
 const SALT_ROUNDS = 12;
+
+function issueToken(userId: string): string {
+  return createSignedToken(userId, config.auth.tokenTtlSeconds, config.auth.sessionSecret);
+}
 
 /**
  * Registers a new user. The very first user to register becomes admin.
@@ -37,12 +43,13 @@ export async function registerUser(username: string, password: string): Promise<
       success: true,
       message: 'Registration successful.',
       user,
-      token: user.id, // Simple token = userId (sufficient for cookie-based auth)
+      token: issueToken(user.id),
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     log.error('Registration error', { source: 'authService#registerUser', error: message });
-    return { success: false, message: `Registration failed: ${message}` };
+    // Details stay in the logs — never echo internals to the client
+    return { success: false, message: 'Registration failed. Please try again.' };
   }
 }
 
@@ -77,21 +84,26 @@ export async function loginUser(username: string, password: string): Promise<Aut
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
-      token: user.id,
+      token: issueToken(user.id),
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     log.error('Login error', { source: 'authService#loginUser', error: message });
-    return { success: false, message: `Login failed: ${message}` };
+    // Details stay in the logs — never echo internals to the client
+    return { success: false, message: 'Login failed. Please try again.' };
   }
 }
 
 /**
- * Validates a token (userId) and returns the user.
+ * Validates a signed session token (signature + expiry) and returns the user.
  */
 export async function validateToken(token: string): Promise<AuthResult> {
   try {
-    const user = await findUserById(token);
+    const userId = verifySignedToken(token, config.auth.sessionSecret);
+    if (!userId) {
+      return { success: false, message: 'Invalid token.' };
+    }
+    const user = await findUserById(userId);
     if (!user) {
       return { success: false, message: 'Invalid token.' };
     }

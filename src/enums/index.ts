@@ -5,3 +5,4 @@ export * from './gitEnum.js';
 export * from './llmEnum.js';
 export * from './authEnum.js';
 export * from './conversationEnum.js';
+export * from './workspaceEnum.js';
