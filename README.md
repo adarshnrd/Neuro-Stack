@@ -188,9 +188,14 @@ Type in the chat UI at `/app`. Non-command messages are normal multi-turn conver
 |---------|--------------|
 | `@AGENT <requirement>` | Tool-using code generation; changes are **staged for review** in a visual diff before you accept |
 | `@AGENT_LOOP <requirement>` | Autonomous plan → implement → verify → review → judge loop (LangGraph), streamed live |
+| `@CREATE_PR <description>` | Commit the workspace changes to a new branch and open a GitHub pull request |
+| `@PR_REVIEW #42` | Fetch the PR diff and return an AI code review |
+| `@PR_APPROVE #42` | Submit an approving review on GitHub |
+| `@MERGE_PR #42 [--method squash]` | Merge a PR (verifies it's open, mergeable, not already merged) |
 | `@NEW_SESSION` | Archive the current session and start fresh |
 
-Generated changes never auto-apply in chat mode — you review and accept them.
+Generated changes never auto-apply in chat mode — you review and accept them. The PR commands
+need `GITHUB_OWNER`/`GITHUB_REPO` and a token/App configured; they return a clear message if not.
 
 ---
 
@@ -265,10 +270,11 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs typecheck + lint + tests on
 
 **Done:** multi-model routing + failover · staged-review `@AGENT` · autonomous `@AGENT_LOOP` · folder
 agent (CLI + web) · autonomous shell with permission modes · durable `.neurostack/` state + resume ·
-cross-model handoff · project indexing · task decomposition · security hardening · tests + CI.
+cross-model handoff · project indexing · task decomposition · full PR lifecycle
+(`@CREATE_PR` · `@PR_REVIEW` · `@PR_APPROVE` · `@MERGE_PR`) · security hardening · tests + CI.
 
 **Next:** true FS sandboxing (container) for shell isolation · full dependency-graph task scheduler ·
-richer web status dashboard · remaining PR-lifecycle commands (`@CREATE_PR` → `@MERGE_PR`).
+richer web status dashboard.
 
 See [`plans/`](plans/) for detailed design docs and decision history.
 

@@ -42,3 +42,9 @@ export const AGENT_TOOL_GUIDANCE: string = [
  * Description for the @REVIEW command.
  */
 export const REVIEW_COMMAND_DESCRIPTION: string = 'Review pending code changes in the visual diff viewer.';
+
+// ─── PR lifecycle command descriptions ────────────────────────────────────────
+export const CREATE_PR_COMMAND_DESCRIPTION: string = 'Commit the current workspace changes to a new branch and open a GitHub pull request.';
+export const PR_REVIEW_COMMAND_DESCRIPTION: string = 'Fetch a pull request diff and return an AI code review. Usage: @PR_REVIEW #42';
+export const PR_APPROVE_COMMAND_DESCRIPTION: string = 'Approve a pull request on GitHub. Usage: @PR_APPROVE #42';
+export const MERGE_PR_COMMAND_DESCRIPTION: string = 'Merge a pull request. Usage: @MERGE_PR #42 [--method squash|rebase|merge]';

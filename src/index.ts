@@ -5,7 +5,15 @@ import { engine } from 'express-handlebars';
 import { config } from './config/index.js';
 import { createChildLogger } from './logger/index.js';
 import router from './web/routes/index.js';
-import { commandRegistry, NewSessionHandler, AgentHandler } from './commands/index.js';
+import {
+  commandRegistry,
+  NewSessionHandler,
+  AgentHandler,
+  CreatePrHandler,
+  PrReviewHandler,
+  PrApproveHandler,
+  MergePrHandler,
+} from './commands/index.js';
 import { changeSetService } from './services/changeSetService.js';
 import { authMiddleware } from './web/middleware/authMiddleware.js';
 import { securityHeaders } from './web/middleware/securityHeaders.js';
@@ -36,6 +44,10 @@ async function bootstrap() {
   log.debug('Registering command handlers', { source: 'index#bootstrap' });
   commandRegistry.register(new NewSessionHandler());
   commandRegistry.register(new AgentHandler());
+  commandRegistry.register(new CreatePrHandler());
+  commandRegistry.register(new PrReviewHandler());
+  commandRegistry.register(new PrApproveHandler());
+  commandRegistry.register(new MergePrHandler());
 
   // Handlebars view engine
   log.debug('Configuring template engine', { source: 'index#bootstrap' });

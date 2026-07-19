@@ -5,4 +5,7 @@ export * from './registry.js';
 // Exporting handlers
 export * from './handlers/newSessionHandler.js';
 export * from './handlers/agentHandler.js';
-// Other handlers will be added here
+export * from './handlers/createPrHandler.js';
+export * from './handlers/prReviewHandler.js';
+export * from './handlers/prApproveHandler.js';
+export * from './handlers/mergePrHandler.js';
