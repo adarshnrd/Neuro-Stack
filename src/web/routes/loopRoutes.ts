@@ -70,6 +70,7 @@ router.post('/api/loop', async (req, res) => {
       res,
       startRun(spec, {
         sessionId,
+        userId,
         autoApprove: autoApprove !== false,
         maxIterations: typeof maxIterations === 'number' ? maxIterations : undefined,
       }),
@@ -94,7 +95,7 @@ router.post('/api/loop/:threadId/resume', async (req, res) => {
     const approved = req.body?.approved === true;
 
     sseInit(res);
-    await pump(res, resumeRun(threadId, approved));
+    await pump(res, resumeRun(threadId, approved, req.userId));
   } catch (error: unknown) {
     handleError(res, error, 'resumeLoop');
   }
