@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model, Types } from 'mongoose'
+import { promises as dns } from 'dns'
+import { isIP } from 'net'
 
 import { Organization, OrganizationDocument } from '@app/database/schemas/organization.schema'
 import { Project, ProjectDocument } from '@app/database/schemas/project.schema'
@@ -51,6 +53,7 @@ export class OrganizationsService {
 
   async create(dto: CreateOrganizationDto, userId: string): Promise<OrganizationDocument> {
     const orgUrl = normalizeUrl(dto.orgUrl)
+    await assertPublicOrgHost(orgUrl)
 
     if (await this.orgModel.exists({ orgUrl })) {
       throw new ConflictException('An organization with this URL is already connected')
@@ -103,6 +106,7 @@ export class OrganizationsService {
     if (dto.isActive !== undefined) org.isActive = dto.isActive
 
     if (dto.pat) {
+      await assertPublicOrgHost(org.orgUrl)
       const authenticated = await this.clientFactory.probe(org.orgUrl, dto.pat)
       if (!authenticated) {
         throw new BadRequestException('Could not authenticate to Azure DevOps with the new PAT')
@@ -252,4 +256,76 @@ function slugFromUrl(orgUrl: string): string {
   const vsts = orgUrl.match(/https?:\/\/([^.]+)\.visualstudio\.com/i)
   if (vsts) return vsts[1]
   return orgUrl.split('/').pop() ?? orgUrl
+}
+
+// SSRF guard: an org's PAT is sent (via AzureClientFactory) to whatever host
+// orgUrl resolves to, so — beyond the DTO's @IsUrl() syntax check — reject
+// any hostname that resolves to a private, loopback, link-local, or
+// reserved address before that happens.
+const PRIVATE_IPV4_RANGES: Array<[string, number]> = [
+  ['10.0.0.0', 8],
+  ['172.16.0.0', 12],
+  ['192.168.0.0', 16],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+]
+
+function ipv4ToInt(ip: string): number {
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0
+}
+
+function isIpv4InRange(ip: string, base: string, prefixLength: number): boolean {
+  const mask = prefixLength === 0 ? 0 : (~0 << (32 - prefixLength)) >>> 0
+  return (ipv4ToInt(ip) & mask) === (ipv4ToInt(base) & mask)
+}
+
+function isPrivateOrReservedIp(ip: string): boolean {
+  const version = isIP(ip)
+  if (version === 4) {
+    return PRIVATE_IPV4_RANGES.some(([base, prefix]) => isIpv4InRange(ip, base, prefix))
+  }
+  if (version === 6) {
+    const normalized = ip.toLowerCase()
+    if (normalized === '::1') return true
+    // IPv4-mapped IPv6 (::ffff:a.b.c.d) — check the embedded IPv4 address.
+    const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    if (mapped) return isPrivateOrReservedIp(mapped[1])
+    // fc00::/7 (unique local addresses): first hextet's leading byte is fc or fd.
+    const firstHextet = normalized.split(':')[0].padStart(4, '0')
+    return firstHextet.slice(0, 2) === 'fc' || firstHextet.slice(0, 2) === 'fd'
+  }
+  return false
+}
+
+/** Rejects an orgUrl whose host resolves to a private/loopback/reserved address. */
+async function assertPublicOrgHost(orgUrl: string): Promise<void> {
+  let hostname: string
+  try {
+    hostname = new URL(orgUrl).hostname
+  } catch {
+    throw new BadRequestException('Invalid organization URL')
+  }
+
+  if (hostname.toLowerCase() === 'localhost') {
+    throw new BadRequestException('Organization URL may not point to a private or internal host')
+  }
+
+  let addresses: string[]
+  if (isIP(hostname) !== 0) {
+    addresses = [hostname]
+  } else {
+    const [ipv4, ipv6] = await Promise.all([
+      dns.resolve4(hostname).catch(() => [] as string[]),
+      dns.resolve6(hostname).catch(() => [] as string[]),
+    ])
+    addresses = [...ipv4, ...ipv6]
+  }
+
+  if (addresses.length === 0) {
+    throw new BadRequestException('Could not resolve organization URL host')
+  }
+
+  if (addresses.some(isPrivateOrReservedIp)) {
+    throw new BadRequestException('Organization URL may not point to a private or internal host')
+  }
 }

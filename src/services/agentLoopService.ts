@@ -17,6 +17,7 @@ const DEFAULT_MAX_ITERATIONS = 6;
 
 export interface RunOptions {
   sessionId: string;
+  userId?: string;
   autoApprove?: boolean;
   maxIterations?: number;
   verificationEnabled?: boolean;
@@ -26,6 +27,11 @@ interface ActiveRun {
   threadId: string;
   spec: TaskSpec;
   changeSetId: string;
+  // Caller who started the run. Only they may resume it. Undefined for runs
+  // started outside the authenticated HTTP flow (e.g. eval scripts), which
+  // therefore can never be resumed via the HTTP endpoint (no caller id can
+  // match `undefined`).
+  userId?: string;
 }
 
 // One compiled graph (with its MemorySaver) shared across runs; each run is a
@@ -60,7 +66,12 @@ export async function* startRun(
     lastFingerprint: '',
   };
 
-  pendingRuns.set(threadId, { threadId, spec, changeSetId: changeSet.changeSetId });
+  pendingRuns.set(threadId, {
+    threadId,
+    spec,
+    changeSetId: changeSet.changeSetId,
+    userId: options.userId,
+  });
 
   log.info('Starting agent loop run', {
     source: 'agentLoopService#startRun',
@@ -74,13 +85,19 @@ export async function* startRun(
 
 /**
  * Resumes a run that paused at the approval gate.
+ *
+ * `userId` must match the run's owner (the caller who started it via
+ * {@link startRun}) — never trust a client-supplied threadId alone. A
+ * mismatch is reported identically to an unknown threadId so a caller can't
+ * distinguish "not yours" from "doesn't exist".
  */
 export async function* resumeRun(
   threadId: string,
   approved: boolean,
+  userId?: string,
 ): AsyncGenerator<LoopProgressEvent, LoopRunResult> {
   const run = pendingRuns.get(threadId);
-  if (!run) {
+  if (!run || run.userId !== userId) {
     throw new Error(`No pending run for thread ${threadId}`);
   }
   log.info('Resuming agent loop run', { source: 'agentLoopService#resumeRun', threadId, approved });

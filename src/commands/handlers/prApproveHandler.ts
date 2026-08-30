@@ -4,7 +4,13 @@ import { ReviewEvent } from '../../enums/gitEnum.js';
 import { GitHubService } from '../../services/githubService.js';
 import { createChildLogger } from '../../logger/index.js';
 import { PR_APPROVE_COMMAND_DESCRIPTION } from '../../constants/commandConstants.js';
-import { missingPrNumberResult, readPrNumber, requireGitHubConfig, toErrorResult } from './prHandlerUtil.js';
+import {
+  missingPrNumberResult,
+  readPrNumber,
+  requireAdmin,
+  requireGitHubConfig,
+  toErrorResult,
+} from './prHandlerUtil.js';
 
 const log = createChildLogger('prApproveHandler');
 
@@ -21,6 +27,9 @@ export class PrApproveHandler implements CommandHandler {
   public async execute(args: CommandArgs, sessionId: string): Promise<CommandResult> {
     const configError = requireGitHubConfig();
     if (configError) return configError;
+
+    const authError = await requireAdmin(sessionId);
+    if (authError) return authError;
 
     const prNumber = readPrNumber(args);
     if (!prNumber) return missingPrNumberResult('PR_APPROVE');

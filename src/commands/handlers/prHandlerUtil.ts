@@ -1,5 +1,30 @@
 import { config } from '../../config/index.js';
 import { CommandArgs, CommandResult } from '../../types/commandTypes.js';
+import { findSessionById } from '../../database/sessionRepository.js';
+import { findUserById } from '../../database/userRepository.js';
+import { UserRole } from '../../enums/authEnum.js';
+
+/**
+ * Gate for PR-affecting commands (@PR_REVIEW, @PR_APPROVE, @MERGE_PR). These
+ * act on the single shared GitHub repo with no per-PR ownership tracked in
+ * our data model, so — mirroring the ADMIN-only gating already used for
+ * equivalent sensitive actions elsewhere in the app (e.g. organizations and
+ * user-management routes) — only an ADMIN-role user may run them. Resolves
+ * the caller's role via the session that issued the command. Returns a
+ * failed CommandResult when the caller isn't an admin, otherwise null.
+ */
+export async function requireAdmin(sessionId: string): Promise<CommandResult | null> {
+  const session = await findSessionById(sessionId);
+  const user = session ? await findUserById(session.userId) : null;
+
+  if (!user || user.role !== UserRole.ADMIN) {
+    return {
+      success: false,
+      message: 'This command requires admin privileges.',
+    };
+  }
+  return null;
+}
 
 /**
  * Gate for all git/PR operations. Returns a failed CommandResult naming the
