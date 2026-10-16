@@ -11,6 +11,20 @@ vi.mock('../src/config/index.js', async (importOriginal) => {
   };
 });
 
+vi.mock('../src/database/sessionRepository.js', () => ({
+  findSessionById: vi.fn(async (sessionId: string) => ({
+    id: sessionId,
+    userId: 'user-admin',
+  })),
+}));
+
+vi.mock('../src/database/userRepository.js', () => ({
+  findUserById: vi.fn(async (userId: string) => ({
+    id: userId,
+    role: 'admin',
+  })),
+}));
+
 import { CreatePrHandler } from '../src/commands/handlers/createPrHandler.js';
 import { PrApproveHandler } from '../src/commands/handlers/prApproveHandler.js';
 import { MergePrHandler } from '../src/commands/handlers/mergePrHandler.js';

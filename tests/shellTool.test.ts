@@ -73,10 +73,11 @@ describe('run_command tool', () => {
   });
 
   it('locks execution to the workspace root (cwd)', async () => {
+    const cwdCmd = process.platform === 'win32' ? 'cd' : 'pwd';
     const result = await workspaceContext.run(
       session({ rootDir: dir, permissionMode: PermissionMode.AUTO }),
-      () => invoke('pwd'),
+      () => invoke(cwdCmd),
     );
-    expect(result).toContain(await fs.realpath(dir));
+    expect(result.toLowerCase()).toContain((await fs.realpath(dir)).toLowerCase());
   });
 });

@@ -161,9 +161,6 @@ router.post('/api/review/:changeSetId/revise', async (req, res) => {
 
     await changeSetService.requestRevision(changeSet.changeSetId, feedback);
 
-    // Call RevisionService in the future
-    // await revisionService.processRevision(changeSetId, feedback, req.body.sessionId);
-
     res.json({ status: 'success', message: 'Revision requested.' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
