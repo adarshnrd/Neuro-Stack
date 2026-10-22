@@ -5,6 +5,7 @@ import {
   invokeModelWithRetry,
   classifyProviderError,
   isExhaustionError,
+  shouldFailOver,
   ProviderErrorKind,
 } from '../src/llm/llmService.js';
 
@@ -24,14 +25,29 @@ describe('classifyProviderError', () => {
   });
 
   it('classifies network blips and 5xx as RETRYABLE', () => {
-    for (const msg of ['model is overloaded', 'high demand', '503 Service Unavailable', 'ECONNRESET', 'fetch failed']) {
+    for (const msg of [
+      'model is overloaded',
+      'high demand',
+      '503 Service Unavailable',
+      'ECONNRESET',
+      'fetch failed',
+      'The operation was aborted due to timeout',
+    ]) {
       expect(classifyProviderError(new Error(msg)), msg).toBe(ProviderErrorKind.RETRYABLE);
     }
   });
 
   it('classifies everything else as FATAL', () => {
-    expect(classifyProviderError(new Error('Invalid API key'))).toBe(ProviderErrorKind.FATAL);
     expect(classifyProviderError(new Error('bad request: unknown field'))).toBe(ProviderErrorKind.FATAL);
+    expect(shouldFailOver(new Error('bad request: unknown field'))).toBe(false);
+  });
+
+  it('classifies bad API keys as UNAUTHORIZED so the chain fails over', () => {
+    for (const msg of ['Invalid API key', '401 {"error":{"code":"invalid_api_key"}}', 'API key not valid. Please pass a valid API key.']) {
+      expect(classifyProviderError(new Error(msg)), msg).toBe(ProviderErrorKind.UNAUTHORIZED);
+      expect(shouldFailOver(new Error(msg)), msg).toBe(true);
+      expect(isExhaustionError(new Error(msg)), msg).toBe(false);
+    }
   });
 });
 
@@ -48,8 +64,17 @@ describe('contentToString', () => {
     expect(contentToString('<think>a</think>x<think>b</think>y')).toBe('xy');
   });
 
-  it('stringifies structured content', () => {
-    expect(contentToString([{ type: 'text', text: 'hi' }])).toBe('[{"type":"text","text":"hi"}]');
+  it('extracts text from block-form content and drops signatures', () => {
+    expect(
+      contentToString([
+        { type: 'text', text: 'Done.', thoughtSignature: 'CvkCAWkU...' },
+        { type: 'text', text: '```\nAll tests passed!\n```' },
+      ]),
+    ).toBe('Done.\n```\nAll tests passed!\n```');
+  });
+
+  it('falls back to JSON for blocks without text', () => {
+    expect(contentToString([{ type: 'image_url', image_url: 'x' }])).toBe('[{"type":"image_url","image_url":"x"}]');
   });
 });
 

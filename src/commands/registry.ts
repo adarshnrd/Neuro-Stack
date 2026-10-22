@@ -24,9 +24,6 @@ export class CommandRegistry {
     return list;
   }
 
-  public hasCommand(name: CommandName): boolean {
-    return this.handlers.has(name);
-  }
 }
 
 // Singleton registry instance

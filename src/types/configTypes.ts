@@ -1,12 +1,17 @@
 export interface ServerConfig {
   port: number;
   host: string;
+  nodeEnv: 'development' | 'production' | 'test';
+  isProduction: boolean;
+  /** Express "trust proxy" value (false, true, hop count, or subnet list). */
+  trustProxy: boolean | number | string;
 }
 
 export interface LLMConfig {
-  provider: string;
   model: string;
   apiKey: string;
+  /** Per-call timeout for LLM requests, in milliseconds. */
+  timeoutMs: number;
 }
 
 export interface GitHubConfig {
@@ -26,17 +31,11 @@ export interface WorkspaceConfig {
 
 export interface ContextConfig {
   basePath: string;
-  maxFileSizeKB: number;
-}
-
-export interface SessionConfig {
-  activeWindowHours: number;
-  retentionDays: number;
-  autoPurgeDays: number;
 }
 
 export interface LogConfig {
   level: string;
+  dir: string;
 }
 
 export interface DatabaseConfig {
@@ -47,6 +46,8 @@ export interface DatabaseConfig {
 export interface AuthConfig {
   sessionSecret: string;
   tokenTtlSeconds: number;
+  /** Whether new accounts may self-register (the first/admin account always can). */
+  allowRegistration: boolean;
 }
 
 export interface FolderAgentConfig {
@@ -72,7 +73,6 @@ export interface AppConfig {
   github: GitHubConfig;
   workspace: WorkspaceConfig;
   context: ContextConfig;
-  session: SessionConfig;
   log: LogConfig;
   database: DatabaseConfig;
   auth: AuthConfig;

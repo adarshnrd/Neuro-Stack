@@ -4,3 +4,12 @@ logs/
 workspace/
 .env
 .DS_Store
+
+# Runtime data written by the app (changesets, legacy session snapshots, task specs)
+context/changesets/
+context/sessions/
+context/archive/
+context/tasks/
+
+# Folder-agent state written into target folders
+.neurostack/

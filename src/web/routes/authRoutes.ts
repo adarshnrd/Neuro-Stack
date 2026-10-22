@@ -1,5 +1,6 @@
 import express from 'express';
-import { registerUser, loginUser } from '../../services/authService.js';
+import { z } from 'zod';
+import { registerUser, loginUser, isRegistrationOpen } from '../../services/authService.js';
 import { findUserById } from '../../database/userRepository.js';
 import { config } from '../../config/index.js';
 import { createChildLogger } from '../../logger/index.js';
@@ -11,9 +12,28 @@ const log = createChildLogger('authRoutes');
 // Brute-force protection for credential endpoints
 const authLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, name: 'auth' });
 
-function authCookie(token: string): string {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `neurostack_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${config.auth.tokenTtlSeconds}${secure}`;
+// bcrypt only uses the first 72 bytes of a password, so cap the length there.
+const registerSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Username must be at least 3 characters.')
+    .max(32, 'Username must be at most 32 characters.')
+    .regex(/^[a-zA-Z0-9_.-]+$/, 'Username may only contain letters, numbers, dot, dash, and underscore.'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters.')
+    .max(72, 'Password must be at most 72 characters.'),
+});
+
+const loginSchema = z.object({
+  username: z.string().trim().min(1).max(32),
+  password: z.string().min(1).max(72),
+});
+
+function authCookie(token: string, maxAgeSeconds: number = config.auth.tokenTtlSeconds): string {
+  const secure = config.server.isProduction ? '; Secure' : '';
+  return `neurostack_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`;
 }
 
 /**
@@ -22,18 +42,18 @@ function authCookie(token: string): string {
  */
 router.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      res.status(400).json({ success: false, message: 'Username and password are required.' });
+    const parsed = registerSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, message: parsed.error.errors[0]?.message ?? 'Invalid input.' });
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+    if (!(await isRegistrationOpen())) {
+      res.status(403).json({ success: false, message: 'Registration is disabled. Ask an administrator for an account.' });
       return;
     }
 
+    const { username, password } = parsed.data;
     const result = await registerUser(username, password);
 
     if (result.success && result.token) {
@@ -55,13 +75,13 @@ router.post('/api/auth/register', authLimiter, async (req, res) => {
  */
 router.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
+    const parsed = loginSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
       res.status(400).json({ success: false, message: 'Username and password are required.' });
       return;
     }
 
+    const { username, password } = parsed.data;
     const result = await loginUser(username, password);
 
     if (result.success && result.token) {
@@ -81,7 +101,7 @@ router.post('/api/auth/login', authLimiter, async (req, res) => {
  * POST /api/auth/logout
  */
 router.post('/api/auth/logout', (_req, res) => {
-  res.setHeader('Set-Cookie', 'neurostack_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+  res.setHeader('Set-Cookie', authCookie('', 0));
   res.json({ success: true, message: 'Logged out.' });
 });
 

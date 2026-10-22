@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import { Server } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { engine } from 'express-handlebars';
@@ -7,7 +8,6 @@ import { createChildLogger } from './logger/index.js';
 import router from './web/routes/index.js';
 import {
   commandRegistry,
-  NewSessionHandler,
   AgentHandler,
   CreatePrHandler,
   PrReviewHandler,
@@ -22,9 +22,10 @@ import { checkSupabaseConnection } from './database/supabaseClient.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const log = createChildLogger('bootstrap');
+const SHUTDOWN_GRACE_MS = 10_000;
 
 async function bootstrap() {
-  log.info('Starting Project NeuroStack...', { source: 'index#bootstrap', env: config.server.host });
+  log.info('Starting Project NeuroStack...', { source: 'index#bootstrap', env: config.server.nodeEnv });
 
   // Verify Supabase connection
   const dbOk = await checkSupabaseConnection();
@@ -39,10 +40,12 @@ async function bootstrap() {
   await changeSetService.loadFromDisk();
   
   const app = express();
+  app.disable('x-powered-by');
+  // Behind a reverse proxy this makes req.ip (rate limiting) and req.secure reflect the real client
+  app.set('trust proxy', config.server.trustProxy);
 
   // Register command handlers
   log.debug('Registering command handlers', { source: 'index#bootstrap' });
-  commandRegistry.register(new NewSessionHandler());
   commandRegistry.register(new AgentHandler());
   commandRegistry.register(new CreatePrHandler());
   commandRegistry.register(new PrReviewHandler());
@@ -61,7 +64,7 @@ async function bootstrap() {
   // Middleware
   log.debug('Mounting middleware', { source: 'index#bootstrap' });
   app.use(securityHeaders);
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: config.server.isProduction ? '1h' : 0 }));
   app.use(express.json({ limit: '256kb' }));
 
   // Auth middleware — gates all routes except public paths
@@ -95,10 +98,51 @@ async function bootstrap() {
     }
   });
 
-  app.listen(config.server.port, () => {
+  const server = app.listen(config.server.port, config.server.host, () => {
     log.info(`Server running on http://${config.server.host}:${config.server.port}`, { source: 'index#bootstrap' });
   });
+
+  registerShutdownHandlers(server);
 }
+
+/**
+ * Stops accepting connections on SIGTERM/SIGINT and lets in-flight requests
+ * finish. Long-lived SSE streams (agent runs) get a grace period, then the
+ * process exits regardless so orchestrators aren't left waiting.
+ */
+function registerShutdownHandlers(server: Server): void {
+  let shuttingDown = false;
+  const shutdown = (signal: string): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log.info('Shutdown signal received — closing server', { source: 'index#shutdown', signal });
+
+    server.close(() => {
+      log.info('HTTP server closed', { source: 'index#shutdown' });
+      process.exit(0);
+    });
+    server.closeIdleConnections();
+
+    setTimeout(() => {
+      log.warn('Forcing shutdown after grace period', { source: 'index#shutdown', graceMs: SHUTDOWN_GRACE_MS });
+      process.exit(1);
+    }, SHUTDOWN_GRACE_MS).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+process.on('unhandledRejection', (reason: unknown) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  log.error('Unhandled promise rejection', { source: 'index#unhandledRejection', error: message, stack });
+});
+
+process.on('uncaughtException', (error: Error) => {
+  log.error('Uncaught exception — exiting', { source: 'index#uncaughtException', error: error.message, stack: error.stack });
+  process.exit(1);
+});
 
 bootstrap().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

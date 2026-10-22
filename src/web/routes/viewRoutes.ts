@@ -1,24 +1,25 @@
 import express from 'express';
+import { requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
+router.get('/', (_req, res) => {
   res.redirect('/app');
 });
 
-router.get('/app', (req, res) => {
+router.get('/app', (_req, res) => {
   res.render('index');
 });
 
-router.get('/folder', (req, res) => {
+router.get('/folder', requireAdmin, (_req, res) => {
   res.render('folder');
 });
 
-router.get('/signin', (req, res) => {
+router.get('/signin', (_req, res) => {
   res.render('login', { isSignup: false });
 });
 
-router.get('/signup', (req, res) => {
+router.get('/signup', (_req, res) => {
   res.render('login', { isSignup: true });
 });
 

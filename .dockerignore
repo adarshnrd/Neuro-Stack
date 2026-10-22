@@ -1,0 +1,17 @@
+node_modules
+dist
+logs
+workspace
+.env
+.git
+.github
+.cursor
+.agents
+context/changesets
+context/sessions
+context/archive
+tests
+evals
+plans
+*.md
+!README.md

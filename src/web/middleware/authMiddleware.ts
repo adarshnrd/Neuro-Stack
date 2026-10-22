@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { validateToken } from '../../services/authService.js';
 import { getCookie } from '../../utils/cookieUtil.js';
+import { UserRole } from '../../enums/authEnum.js';
 
 // Extend Express Request to carry auth state
 declare global {
@@ -68,4 +69,21 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   req.userId = result.user.id;
   req.userRole = result.user.role;
   next();
+}
+
+/**
+ * Restricts a route to ADMIN users. Must run after {@link authMiddleware}.
+ * Used for features that execute code on the host (folder agent).
+ */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (req.userRole === UserRole.ADMIN) {
+    next();
+    return;
+  }
+  // originalUrl, not path — when mounted under a prefix, req.path is relative to it
+  if (req.originalUrl.startsWith('/api/')) {
+    res.status(403).json({ type: 'error', content: 'This feature requires admin privileges.' });
+  } else {
+    res.status(403).send('This feature requires admin privileges.');
+  }
 }

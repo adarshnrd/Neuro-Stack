@@ -103,28 +103,6 @@ export async function getConversationsPaginated(
 }
 
 /**
- * Returns the total number of conversations in a session.
- */
-export async function getConversationCount(sessionId: string): Promise<number> {
-  const supabase = getSupabaseClient();
-
-  const { count, error } = await supabase
-    .from('conversations')
-    .select('id', { count: 'exact', head: true })
-    .eq('session_id', sessionId);
-
-  if (error) {
-    log.error('Failed to count conversations', {
-      source: 'conversationRepository#getConversationCount',
-      error: error.message,
-    });
-    return 0;
-  }
-
-  return count ?? 0;
-}
-
-/**
  * Fetches the most recent conversations for a session in chronological order.
  * Used to build LLM context — returns only user and assistant messages.
  *

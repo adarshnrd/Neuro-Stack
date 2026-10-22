@@ -4,6 +4,9 @@ import path from 'path';
 import { constants as fsConstants } from 'fs';
 import { WorkspaceWriteMode, PermissionMode } from '../enums/workspaceEnum.js';
 import { ApprovalBroker, WorkspaceSession } from '../types/workspaceTypes.js';
+import { config } from '../config/index.js';
+import { ValidationError } from '../errors/validationError.js';
+import { resolveInsideRoot } from '../utils/fileUtil.js';
 import { createChildLogger } from '../logger/index.js';
 
 const log = createChildLogger('workspaceService');
@@ -56,6 +59,22 @@ export async function openWorkspace(
   });
 
   return session;
+}
+
+/**
+ * Resolves a user-supplied folder path and guarantees it sits inside the
+ * configured browse root (FOLDER_AGENT_ROOT). Throws ValidationError otherwise.
+ */
+export function resolveAllowedFolder(requestedPath: unknown): string {
+  const base = config.folderAgent.browseRoot;
+  if (typeof requestedPath !== 'string' || !requestedPath.trim()) {
+    throw new ValidationError('path', 'is required');
+  }
+  try {
+    return resolveInsideRoot(base, path.relative(base, path.resolve(requestedPath)));
+  } catch {
+    throw new ValidationError('path', 'must be inside the allowed folder root');
+  }
 }
 
 /** True for the filesystem root or the user's home directory. */

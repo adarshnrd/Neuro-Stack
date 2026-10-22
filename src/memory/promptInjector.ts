@@ -10,7 +10,6 @@ export class PromptInjector {
   public buildPrompt(
     systemRules: string,
     commandTemplate: string,
-    sessionContext: string,
     learnedPatterns: string,
     userMessage: string
   ): BaseMessage[] {
@@ -27,11 +26,6 @@ export class PromptInjector {
     if (commandTemplate) {
       log.debug('Injecting command template', { source: 'promptInjector#buildPrompt', length: commandTemplate.length });
       systemContent += `## Current Command Context\n${commandTemplate}\n\n`;
-    }
-
-    if (sessionContext) {
-      log.debug('Injecting session context', { source: 'promptInjector#buildPrompt', length: sessionContext.length });
-      systemContent += `## Active Session Context\n${sessionContext}\n\n`;
     }
 
     if (learnedPatterns) {

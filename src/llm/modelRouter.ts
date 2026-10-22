@@ -30,7 +30,7 @@ function instantiate(provider: LLMProvider, role: ModelRole): BaseChatModel {
   const opts = ROLE_OPTIONS[role];
   switch (provider) {
     case LLMProvider.GEMINI:
-      return createGeminiProvider(config.llm);
+      return createGeminiProvider(config.llm, { temperature: opts.temperature });
     case LLMProvider.GROQ:
       return createGroqProvider(config.llmProviders.groq!, { temperature: opts.temperature });
     case LLMProvider.NVIDIA:
@@ -69,9 +69,4 @@ export function resolveRoleChain(role: ModelRole): RoleModelEntry[] {
     throw new Error(`No configured provider available for role: ${role}`);
   }
   return chain.map((provider) => ({ provider, model: getModel(provider, role) }));
-}
-
-/** The preferred (first available) model for a role, e.g. for tool binding. */
-export function getModelForRole(role: ModelRole): RoleModelEntry {
-  return resolveRoleChain(role)[0];
 }

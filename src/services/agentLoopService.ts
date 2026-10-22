@@ -104,10 +104,6 @@ export async function* resumeRun(
   return yield* drive(threadId, new Command({ resume: approved }), run.spec, run.changeSetId);
 }
 
-export function hasPendingRun(threadId: string): boolean {
-  return pendingRuns.has(threadId);
-}
-
 // ── Internal driver ──────────────────────────────────────────────────────────
 
 async function* drive(

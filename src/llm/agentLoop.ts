@@ -4,7 +4,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Logger } from 'winston';
 import { LLMProvider, ModelRole } from '../enums/index.js';
 import { resolveRoleChain } from './modelRouter.js';
-import { contentToString, invokeForRole, invokeModelWithRetry, classifyProviderError, ProviderErrorKind } from './llmService.js';
+import { contentToString, invokeForRole, invokeModelWithRetry, isExhaustionError, shouldFailOver } from './llmService.js';
 import { createChildLogger, withQueryId } from '../logger/index.js';
 
 const log = createChildLogger('agentLoop');
@@ -16,6 +16,9 @@ const KEEP_RECENT_ROUNDS = 2;
 // On a provider handoff, compress harder — the next provider may have a much
 // smaller context/token budget (e.g. Groq's free-tier TPM).
 const KEEP_RECENT_ROUNDS_ON_HANDOFF = 1;
+// Identical consecutive rounds (same calls, same results) before nudging / stopping the agent.
+const STALL_NUDGE_REPEATS = 3;
+const STALL_STOP_REPEATS = 5;
 
 // Proactive per-provider transcript budgets (chars ≈ 4×tokens). Kept well under
 // each provider's real limit so we compress BEFORE a hard context/rate error —
@@ -56,6 +59,8 @@ export interface AgentLoopResult {
   toolCallCount: number;
   compressed: boolean;
   hitRoundCap: boolean;
+  /** True when the loop was stopped for repeating the same tool call with the same result. */
+  stalled: boolean;
   /** How many times the loop handed off to a different provider mid-task. */
   handoffCount: number;
 }
@@ -98,6 +103,11 @@ export async function runAgentLoop(
   let providerIdx = 0;
   let boundModel = bindTools(chain[0].model, tools);
   let handoffCount = 0;
+  let lastExhaustionError: unknown = null;
+
+  // Stall detection state (see STALL_* constants)
+  let lastRoundSignature = '';
+  let repeatedRounds = 0;
 
   const transcript = (): BaseMessage[] => [
     ...head,
@@ -118,7 +128,8 @@ export async function runAgentLoop(
    * provider in the chain (compressing the transcript first so a smaller-budget
    * model can accept it) and retries. Throws only when every provider is spent.
    */
-  const invokeCoder = async (round: number, wrapUp: boolean): Promise<AIMessage> => {
+  const invokeCoder = async (round: number, wrapUpMessage: HumanMessage | null): Promise<AIMessage> => {
+    const wrapUp = wrapUpMessage !== null;
     for (;;) {
       // Proactive fit: compress to the current provider's budget before calling,
       // so we don't waste a round discovering the transcript is too large.
@@ -131,13 +142,16 @@ export async function runAgentLoop(
         const model = wrapUp ? chain[providerIdx].model : boundModel;
         return (await invokeModelWithRetry(
           model,
-          transcript().concat(wrapUp ? [WRAP_UP_MESSAGE] : []),
+          transcript().concat(wrapUpMessage ? [wrapUpMessage] : []),
           options.queryId,
           `coder@${chain[providerIdx].provider}${wrapUp ? ':wrapup' : ''}`,
         )) as AIMessage;
       } catch (error: unknown) {
-        const exhausted = classifyProviderError(error) === ProviderErrorKind.EXHAUSTED;
-        if (!exhausted || providerIdx >= chain.length - 1) throw error;
+        if (isExhaustionError(error)) lastExhaustionError = error;
+        if (!shouldFailOver(error)) throw error;
+        // Every provider is spent. If any of them hit a quota, surface that so the
+        // run PAUSES (resumable once limits reset) rather than failing on a bad key.
+        if (providerIdx >= chain.length - 1) throw lastExhaustionError ?? error;
 
         const fromProvider = chain[providerIdx].provider;
         providerIdx++;
@@ -158,7 +172,7 @@ export async function runAgentLoop(
   };
 
   for (let round = 1; round <= maxRounds; round++) {
-    const response = await invokeCoder(round, false);
+    const response = await invokeCoder(round, null);
 
     const toolCalls = response.tool_calls ?? [];
     if (toolCalls.length === 0) {
@@ -168,7 +182,7 @@ export async function runAgentLoop(
         toolCallCount,
         handoffCount,
       });
-      return { content: contentToString(response.content), rounds: round, toolCallCount, compressed, hitRoundCap: false, handoffCount };
+      return { content: contentToString(response.content), rounds: round, toolCallCount, compressed, hitRoundCap: false, stalled: false, handoffCount };
     }
 
     // Store a normalized assistant message (string content + tool_calls) so the
@@ -180,6 +194,16 @@ export async function runAgentLoop(
       const result = await executeTool(toolsByName, call.name, call.args, traceLog);
       segment.push(new ToolMessage({ content: result, tool_call_id: call.id ?? `call_${toolCallCount}` }));
     }
+
+    // Stall guard: weaker models sometimes repeat the exact same call forever
+    // (e.g. re-running a test that already passes). Nudge, then force a wrap-up.
+    const roundSignature = JSON.stringify([
+      toolCalls.map((call) => [call.name, call.args]),
+      segment.slice(1).map((message) => contentToString(message.content)),
+    ]);
+    repeatedRounds = roundSignature === lastRoundSignature ? repeatedRounds + 1 : 1;
+    lastRoundSignature = roundSignature;
+    if (repeatedRounds === STALL_NUDGE_REPEATS) segment.push(STALL_NUDGE_MESSAGE);
     roundSegments.push(segment);
 
     if (charCount(transcript()) > TRANSCRIPT_CHAR_BUDGET) {
@@ -194,16 +218,38 @@ export async function runAgentLoop(
         toolCalls: toolCalls.map((c) => ({ name: c.name, args: c.args })),
       });
     }
+
+    if (repeatedRounds >= STALL_STOP_REPEATS) {
+      traceLog.warn('Agent loop stalled — same tool call and result repeated', {
+        source: 'agentLoop#runAgentLoop',
+        round,
+        repeatedRounds,
+        toolCallCount,
+      });
+      const stallWrapUp = await invokeCoder(round, STALL_WRAP_UP_MESSAGE);
+      return { content: contentToString(stallWrapUp.content), rounds: round, toolCallCount, compressed, hitRoundCap: false, stalled: true, handoffCount };
+    }
   }
 
   // Round cap hit — one final call (with handoff support) for a coherent answer
   traceLog.warn('Agent loop hit round cap', { source: 'agentLoop#runAgentLoop', maxRounds, toolCallCount });
-  const wrapUp = await invokeCoder(maxRounds, true);
-  return { content: contentToString(wrapUp.content), rounds: maxRounds, toolCallCount, compressed, hitRoundCap: true, handoffCount };
+  const wrapUp = await invokeCoder(maxRounds, WRAP_UP_MESSAGE);
+  return { content: contentToString(wrapUp.content), rounds: maxRounds, toolCallCount, compressed, hitRoundCap: true, stalled: false, handoffCount };
 }
 
 const WRAP_UP_MESSAGE = new HumanMessage(
   'You have reached the tool-call budget. Summarize what you accomplished, what remains to be done, and any changes made.',
+);
+
+const STALL_NUDGE_MESSAGE = new HumanMessage(
+  'You have now made the exact same tool call with the exact same result several times in a row. Repeating it will ' +
+    'not change anything. If the task is complete, stop calling tools and give your final summary; otherwise take a ' +
+    'different action.',
+);
+
+const STALL_WRAP_UP_MESSAGE = new HumanMessage(
+  'You kept repeating the same tool call with the same result, so the run is being stopped. Summarize what you ' +
+    'accomplished, the final build/test state, and anything that remains to be done.',
 );
 
 /** Binds tools to a model, asserting the capability the chain filter already guaranteed. */

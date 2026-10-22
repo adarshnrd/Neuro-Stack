@@ -2,13 +2,16 @@ import fs from 'fs/promises';
 import path from 'path';
 import { config } from '../config/index.js';
 import { AcceptanceCriterion, TaskSpec } from '../types/agentTaskTypes.js';
-import { ensureDirectory, fileExists } from '../utils/fileUtil.js';
+import { fileExists } from '../utils/fileUtil.js';
 import { createChildLogger } from '../logger/index.js';
 
 const log = createChildLogger('taskSpecService');
 
 const TASKS_DIR = 'tasks';
 const CHECKLIST_RE = /^\s*-\s*\[( |x|X)\]\s+(.*)$/;
+// Matches slugify() output. Anything else (e.g. `../`) is rejected so a
+// client-supplied slug can never read or rewrite files outside tasks/.
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,59}$/;
 
 function tasksDir(): string {
   return path.join(config.context.basePath, TASKS_DIR);
@@ -82,6 +85,10 @@ export function serializeTaskSpec(spec: TaskSpec): string {
 
 /** Loads a task spec from disk by slug. Returns null if absent. */
 export async function loadTaskSpec(slug: string): Promise<TaskSpec | null> {
+  if (!SLUG_RE.test(slug)) {
+    log.warn('Rejected invalid task slug', { source: 'taskSpecService#loadTaskSpec', slug });
+    return null;
+  }
   const filePath = path.join(tasksDir(), `${slug}.md`);
   if (!(await fileExists(filePath))) return null;
   const markdown = await fs.readFile(filePath, 'utf-8');
@@ -106,15 +113,6 @@ export function taskSpecFromRequirement(requirement: string): TaskSpec {
     description: requirement.trim(),
     criteria: explicit.length > 0 ? explicit : [{ text: requirement.trim(), done: false }],
   };
-}
-
-/** Persists a task spec to `tasks/<slug>.md`, creating the directory if needed. */
-export async function saveTaskSpec(spec: TaskSpec): Promise<string> {
-  await ensureDirectory(tasksDir());
-  const filePath = path.join(tasksDir(), `${spec.slug}.md`);
-  await fs.writeFile(filePath, serializeTaskSpec(spec), 'utf-8');
-  log.info('Task spec saved', { source: 'taskSpecService#saveTaskSpec', slug: spec.slug, filePath });
-  return filePath;
 }
 
 /**

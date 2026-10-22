@@ -1,4 +1,6 @@
 import { insertConversation } from '../database/conversationRepository.js';
+import { setSessionTitleIfEmpty, touchSession } from '../database/sessionRepository.js';
+import { truncateText } from '../utils/stringUtil.js';
 import { ChatResult } from '../types/chatTypes.js';
 import { createChildLogger } from '../logger/index.js';
 import { ConversationRole } from '../enums/conversationEnum.js';
@@ -59,6 +61,36 @@ export async function recordExchange(
       source: 'conversationPersistenceService#recordExchange',
       error: message,
       sessionId,
+    });
+  }
+}
+
+/**
+ * Records a folder-agent run started from the chat UI as a normal exchange, so
+ * it shows up in the session's history: the prompt (tagged with the folder) as
+ * the user turn, the agent's final report as the assistant turn. Also names an
+ * untitled session after the prompt. Never throws.
+ */
+export async function recordFolderRunExchange(
+  sessionId: string,
+  userId: string,
+  folder: string,
+  prompt: string | null,
+  response: ChatResult,
+): Promise<void> {
+  const userMessage = prompt
+    ? `📁 ${folder}\n\n${prompt}`
+    : `📁 ${folder}\n\n⟳ Resume the interrupted run`;
+
+  try {
+    await setSessionTitleIfEmpty(sessionId, truncateText(prompt ?? `Resume in ${folder}`, 50));
+    await recordExchange(sessionId, userId, userMessage, response);
+    await touchSession(sessionId);
+  } catch (error: unknown) {
+    log.error('Failed to persist folder-agent exchange', {
+      source: 'conversationPersistenceService#recordFolderRunExchange',
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

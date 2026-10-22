@@ -42,6 +42,7 @@ describe('CreatePrHandler', () => {
       stageFiles: vi.fn(async () => { calls.push('stage'); }),
       commitChanges: vi.fn(async () => { calls.push('commit'); }),
       pushBranch: vi.fn(async () => { calls.push('push'); }),
+      checkoutBranch: vi.fn(async () => { calls.push('checkout-base'); }),
     } as unknown as GitService;
     const github = {
       createPullRequest: vi.fn(async () => ({ number: 42, url: 'https://gh/pr/42' })),
@@ -52,7 +53,7 @@ describe('CreatePrHandler', () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toContain('#42');
-    expect(calls).toEqual(['branch', 'stage', 'commit', 'push']);
+    expect(calls).toEqual(['branch', 'stage', 'commit', 'push', 'checkout-base']);
     expect((result.data as { prNumber: number }).prNumber).toBe(42);
   });
 

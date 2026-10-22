@@ -21,8 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let sessionId            = null;
   let availableCommands    = [];
   let selectedCommandIdx   = -1;
-  let isSending            = false;
   let isNewSessionPending  = false;
+
+  // ── Per-session work (sessions run independently, in parallel) ──
+  const busySessions       = new Set(); // sessions with a chat request / agent run in flight
+  const approvalSessions   = new Set(); // sessions whose folder run is waiting on Allow/Deny
+  const liveRows           = new Map(); // sessionId → message rows of in-flight work (re-shown on switch-back)
 
   // ── Pagination state ──
   let oldestCursor       = null;
@@ -31,6 +35,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Auth state ──
   let currentUser        = null;
+
+  // ── Folder-agent mode (admin only) ──
+  // Each session can be bound to one project folder (saved on the server). In a
+  // bound session, prompts run the autonomous folder agent there instead of the
+  // conversational model — so different sessions can work on different projects.
+  const sessionFolders     = new Map(); // sessionId → bound project folder
+  const folderBtn          = document.getElementById('folder-btn');
+  const folderBar          = document.getElementById('folder-bar');
+  const folderBarPath      = document.getElementById('folder-bar-path');
+  const folderModeSelect   = document.getElementById('folder-mode');
+  const folderResumeBtn    = document.getElementById('folder-resume-btn');
+  const folderClearBtn     = document.getElementById('folder-clear-btn');
+  const folderModal        = document.getElementById('folder-modal');
+  const folderCurrentPath  = document.getElementById('folder-current-path');
+  const folderDirList      = document.getElementById('folder-dir-list');
+  const folderParentBtn    = document.getElementById('folder-parent-btn');
+  const defaultPlaceholder = inputEl.placeholder;
+  let isFolderModeEnabled  = false;
+  let browsePath           = null;
+  let browseParent         = null;
 
   // ── Configure marked.js ──
   // (Code highlighting happens in processCodeBlocks — the `highlight` option
@@ -96,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.success && data.user) {
         currentUser = data.user;
         renderUserInfo();
+        initFolderMode();
         loadSessions();
       } else {
         window.location.href = '/signin';
@@ -131,7 +156,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/sessions');
       const data = await res.json();
       const sessions = data.sessions || [];
+      sessionFolders.clear();
+      sessions.forEach((s) => { if (s.folderPath) sessionFolders.set(s.id, s.folderPath); });
       renderSessionList(sessions);
+      renderFolderBar();
+      const viewedSession = sessions.find((s) => s.id === sessionId);
+      if (viewedSession?.title) updateSessionHeaderTitle(viewedSession.title);
 
       // Only auto-select the latest session on initial page load.
       // Skip when: user is composing a new session, or caller explicitly requested skip.
@@ -166,9 +196,30 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="session-title">${escapeHtml(title)}</span>
         <span class="session-time">${time}</span>
       `;
+      if (s.folderPath) {
+        const folderLabel = document.createElement('span');
+        folderLabel.className = 'session-folder';
+        folderLabel.textContent = '📁 ' + folderName(s.folderPath);
+        folderLabel.title = s.folderPath;
+        item.appendChild(folderLabel);
+      }
       item.addEventListener('click', () => switchSession(s.id));
       listEl.appendChild(item);
     });
+    refreshSessionBadges();
+  }
+
+  /** Marks sidebar sessions that are working, or waiting on an approval, in the background. */
+  function refreshSessionBadges() {
+    document.querySelectorAll('.session-item').forEach((el) => {
+      const id = el.dataset?.sessionId;
+      el.classList.toggle('running', busySessions.has(id));
+      el.classList.toggle('needs-approval', approvalSessions.has(id));
+    });
+  }
+
+  function folderName(folderPath) {
+    return folderPath.split(/[\\/]/).filter(Boolean).pop() || folderPath;
   }
 
   /**
@@ -187,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showWelcomeScreen();
     updateSessionHeaderTitle('New Session');
+    refreshViewState();
 
     // Remove active highlight from all sidebar sessions
     document.querySelectorAll('.session-item').forEach((el) => {
@@ -208,8 +260,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load conversation history for this session
     await loadConversationHistory();
+    if (sessionId !== newSessionId) return; // the user moved on while history loaded
 
-    setStatus('ready', 'Ready');
+    // Work still running in this session (started earlier) isn't in history yet — show it live
+    (liveRows.get(sessionId) || []).forEach((row) => messagesContainer.appendChild(row));
+    scrollToBottom();
+    refreshViewState();
 
     // Update active indicator in sidebar
     document.querySelectorAll('.session-item').forEach((el) => {
@@ -223,9 +279,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function loadConversationHistory() {
+    const historySessionId = sessionId;
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/conversations?limit=10`);
+      const res = await fetch(`/api/sessions/${historySessionId}/conversations?limit=10`);
       const data = await res.json();
+      if (sessionId !== historySessionId) return; // switched away — don't render into another session
 
       if (data.conversations && data.conversations.length > 0) {
         data.conversations.forEach((msg) => renderHistoryMessage(msg));
@@ -336,133 +394,125 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function sendMessage() {
     const text = inputEl.value.trim();
-    if (!text || isSending) return;
+    if (!text || isBusy(sessionId)) return;
 
     // Lazily create DB session on first message (deferred from "New Session" click)
-    if (!sessionId && currentUser) {
-      try {
-        const res = await fetch('/api/sessions', { method: 'POST' });
-        const data = await res.json();
-        if (data.session) {
-          sessionId = data.session.id;
-          isNewSessionPending = false;
-        }
-      } catch (err) {
-        console.error('Failed to auto-create session', err);
-      }
-    }
+    await ensureSession();
+    const targetSession = sessionId;
+    if (!targetSession || isBusy(targetSession)) return;
 
-    isSending = true;
+    // Work is tied to the session it was sent from: the user may switch to
+    // another session (and start work there) while this one is still running.
+    setBusy(targetSession, true);
     hideCommandPopup();
     showChatArea();
 
-    // Render user message
-    appendUserMessage(text);
-
+    const userRow = appendUserMessage(text);
     inputEl.value = '';
     inputEl.style.height = 'auto';
 
-    // Show typing
-    const typingRow = showTypingIndicator();
-
-    // ── Agent loop branch: @AGENT_LOOP streams multi-iteration progress ──
+    const folder = sessionFolders.get(targetSession);
     const loopMatch = text.match(/^@AGENT_LOOP\s+([\s\S]+)/i);
-    if (loopMatch) {
-      removeTypingIndicator(typingRow);
-      try {
-        await streamAgentLoop(loopMatch[1].trim());
-        loadSessions(true);
-      } catch (err) {
-        await appendAIMessage('Agent loop failed to start. Please try again.', 'error');
-      } finally {
-        isSending = false;
-        inputEl.focus();
-      }
-      return;
-    }
 
     try {
-      setStatus('thinking', 'Thinking...');
-
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, sessionId }),
-      });
-
-      const data = await res.json();
-      if (data.sessionId) sessionId = data.sessionId;
-
-      removeTypingIndicator(typingRow);
-
-      const type = data.type === 'error' ? 'error' : data.type === 'system' ? 'system' : 'neurostack';
-      await appendAIMessage(data.content, type, data);
-
-      setStatus('ready', 'Ready');
-
+      if (folder && !text.startsWith('@')) {
+        // ── Folder-agent branch: a bound session's prompts run the agent in its folder ──
+        // (@commands still go to the normal chat pipeline.)
+        await streamFolderAgent({ targetSession, folder, prompt: text, resume: false, userRow });
+      } else if (loopMatch) {
+        // ── Agent loop branch: @AGENT_LOOP streams multi-iteration progress ──
+        await streamAgentLoop(loopMatch[1].trim(), targetSession, userRow);
+      } else {
+        await sendChatMessage(text, targetSession, userRow);
+      }
       // Refresh sidebar to show new/updated session title — skip auto-select
       loadSessions(true);
     } catch (err) {
-      removeTypingIndicator(typingRow);
-      await appendAIMessage('Failed to reach the server. Please try again.', 'error');
-      setStatus('error', 'Error');
+      if (isViewing(targetSession)) {
+        await appendAIMessage('Failed to reach the server. Please try again.', 'error');
+      }
     } finally {
-      isSending = false;
-      inputEl.focus();
+      setBusy(targetSession, false);
+      if (isViewing(targetSession)) inputEl.focus();
     }
   }
 
-  // ═══════════════════════════════════════════════
-  //  AGENT LOOP (SSE streaming)
-  // ═══════════════════════════════════════════════
+  /** Normal conversational message (and @commands) via /api/chat. */
+  async function sendChatMessage(text, targetSession, userRow) {
+    const typingRow = showTypingIndicator();
+    liveRows.set(targetSession, [userRow, typingRow]);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, sessionId: targetSession }),
+      });
+      const data = await res.json();
 
-  /**
-   * Runs an autonomous agent loop and renders live progress from the SSE stream.
-   * Each event updates a single progress panel; the final result appends a
-   * summary and (if changes were staged) a review button.
-   */
-  async function streamAgentLoop(requirement) {
-    setStatus('thinking', 'Running agent loop…');
+      removeTypingIndicator(typingRow);
+      liveRows.delete(targetSession);
+      // If the user moved to another session, the reply is already saved to this
+      // session's history and will show when they come back.
+      if (!isViewing(targetSession)) return;
 
-    // Progress panel
-    const row = document.createElement('div');
-    row.classList.add('message-row', 'neurostack');
-    row.innerHTML = `
-      <div class="msg-avatar neurostack">🔁</div>
-      <div class="msg-content">
-        <div class="msg-bubble">
-          <div class="loop-header"><strong>Agent Loop</strong> <span class="loop-status">starting…</span></div>
-          <ol class="loop-steps"></ol>
-        </div>
-      </div>`;
-    messagesContainer.appendChild(row);
-    scrollToBottom();
-
-    const stepsEl = row.querySelector('.loop-steps');
-    const statusLabel = row.querySelector('.loop-status');
-    const addStep = (label) => {
-      const li = document.createElement('li');
-      li.textContent = label;
-      stepsEl.appendChild(li);
-      scrollToBottom();
-      return li;
-    };
-
-    const res = await fetch('/api/loop', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requirement, sessionId, autoApprove: true }),
-    });
-
-    if (!res.ok || !res.body) {
-      statusLabel.textContent = 'failed to start';
-      return;
+      const type = data.type === 'error' ? 'error' : data.type === 'system' ? 'system' : 'neurostack';
+      await appendAIMessage(data.content, type, data);
+    } finally {
+      removeTypingIndicator(typingRow);
+      liveRows.delete(targetSession);
     }
+  }
 
+  function isViewing(targetSession) {
+    return !!targetSession && sessionId === targetSession;
+  }
+
+  function isBusy(targetSession) {
+    return !!targetSession && busySessions.has(targetSession);
+  }
+
+  function setBusy(targetSession, busy) {
+    if (busy) {
+      busySessions.add(targetSession);
+    } else {
+      busySessions.delete(targetSession);
+      approvalSessions.delete(targetSession);
+      liveRows.delete(targetSession);
+    }
+    refreshSessionBadges();
+    if (isViewing(targetSession)) refreshViewState();
+  }
+
+  /** Syncs the status badge, folder bar and input to the session being viewed. */
+  function refreshViewState() {
+    if (isBusy(sessionId)) {
+      setStatus('thinking', approvalSessions.has(sessionId) ? 'Waiting for your approval' : 'Working…');
+    } else {
+      setStatus('ready', 'Ready');
+    }
+    renderFolderBar();
+  }
+
+  /** Creates the DB session on first use so the exchange is saved to history. */
+  async function ensureSession() {
+    if (sessionId || !currentUser) return;
+    try {
+      const res = await fetch('/api/sessions', { method: 'POST' });
+      const data = await res.json();
+      if (data.session) {
+        sessionId = data.session.id;
+        isNewSessionPending = false;
+      }
+    } catch (err) {
+      console.error('Failed to auto-create session', err);
+    }
+  }
+
+  /** Reads a Server-Sent Events response body, calling onEvent for each JSON `data:` frame. */
+  async function readSseEvents(res, onEvent) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let finalResult = null;
 
     while (true) {
       const { value, done } = await reader.read();
@@ -476,17 +526,369 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!line) continue;
         let evt;
         try { evt = JSON.parse(line.slice(6)); } catch { continue; }
-
-        if (evt.type === 'result') {
-          finalResult = evt.result;
-          continue;
-        }
-        renderLoopEvent(evt, addStep, statusLabel);
+        onEvent(evt);
       }
     }
+  }
+
+  // ═══════════════════════════════════════════════
+  //  FOLDER AGENT (each session bound to its own project folder)
+  // ═══════════════════════════════════════════════
+
+  /** Shows folder mode for admins (the folder agent runs commands on the server host). */
+  function initFolderMode() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    isFolderModeEnabled = true;
+
+    folderBtn?.classList.remove('hidden');
+    document.getElementById('folder-agent-link')?.classList.remove('hidden');
+
+    folderBtn?.addEventListener('click', openFolderPicker);
+    folderClearBtn?.addEventListener('click', () => bindFolderToSession(null));
+    folderResumeBtn?.addEventListener('click', resumeFolderRun);
+    folderParentBtn?.addEventListener('click', () => { if (browseParent) browseFolders(browseParent); });
+    document.getElementById('folder-modal-close')?.addEventListener('click', closeFolderPicker);
+    document.getElementById('folder-cancel-btn')?.addEventListener('click', closeFolderPicker);
+    document.getElementById('folder-select-btn')?.addEventListener('click', () => {
+      if (browsePath) bindFolderToSession(browsePath);
+      closeFolderPicker();
+    });
+    folderModal?.addEventListener('click', (e) => { if (e.target === folderModal) closeFolderPicker(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !folderModal.classList.contains('hidden')) closeFolderPicker();
+    });
+
+    // The folder used to be remembered per browser; it now lives on each session.
+    try { localStorage.removeItem('neurostack.selectedFolder'); } catch { /* storage unavailable */ }
+  }
+
+  /** Saves (or clears, with null) the current session's project folder on the server. */
+  async function bindFolderToSession(folder) {
+    if (isBusy(sessionId)) return;
+    await ensureSession();
+    const targetSession = sessionId;
+    if (!targetSession) return;
+
+    try {
+      const res = await fetch(`/api/sessions/${targetSession}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath: folder }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        await appendAIMessage(data.content || 'Could not set the folder for this session.', 'error', null, false);
+        return;
+      }
+
+      if (data.session?.folderPath) sessionFolders.set(targetSession, data.session.folderPath);
+      else sessionFolders.delete(targetSession);
+
+      if (isViewing(targetSession)) {
+        renderFolderBar();
+        inputEl.focus();
+      }
+      loadSessions(true);
+    } catch (err) {
+      await appendAIMessage('Could not reach the server to set the folder.', 'error', null, false);
+    }
+  }
+
+  /** Shows the viewed session's folder (if any) above the input. */
+  function renderFolderBar() {
+    if (!isFolderModeEnabled) return;
+    const folder = sessionId ? sessionFolders.get(sessionId) || null : null;
+    const busy = isBusy(sessionId);
+
+    folderBar.classList.toggle('hidden', !folder);
+    folderBtn.classList.toggle('active', !!folder);
+    folderBtn.disabled = busy;
+    folderResumeBtn.disabled = busy;
+    folderClearBtn.disabled = busy;
+    folderBarPath.textContent = folder || '';
+    folderBarPath.title = folder || '';
+    inputEl.placeholder = folder
+      ? `Describe what to build or fix in ${folderName(folder)} — the agent works until it is done…`
+      : defaultPlaceholder;
+  }
+
+  function openFolderPicker() {
+    if (isBusy(sessionId)) return;
+    folderModal.classList.remove('hidden');
+    browseFolders((sessionId && sessionFolders.get(sessionId)) || null);
+  }
+
+  function closeFolderPicker() {
+    folderModal.classList.add('hidden');
+  }
+
+  async function browseFolders(targetPath) {
+    folderCurrentPath.textContent = 'Loading…';
+    folderDirList.innerHTML = '';
+    try {
+      const url = targetPath ? `/api/folder/browse?path=${encodeURIComponent(targetPath)}` : '/api/folder/browse';
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok) {
+        // e.g. a folder that is now outside FOLDER_AGENT_ROOT — fall back to the root
+        if (targetPath) return browseFolders(null);
+        folderCurrentPath.textContent = data.content || 'Cannot browse folders.';
+        return;
+      }
+
+      browsePath = data.current;
+      browseParent = data.parent;
+      folderCurrentPath.textContent = data.current;
+      folderParentBtn.disabled = !data.parent;
+
+      if (data.dirs.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'folder-dir-empty';
+        empty.textContent = '(no sub-folders)';
+        folderDirList.appendChild(empty);
+      }
+      data.dirs.forEach((dir) => {
+        const item = document.createElement('li');
+        item.textContent = '📁 ' + dir.name;
+        item.addEventListener('click', () => browseFolders(dir.path));
+        folderDirList.appendChild(item);
+      });
+    } catch (err) {
+      folderCurrentPath.textContent = 'Failed to load folders.';
+    }
+  }
+
+  /** Resumes an interrupted/paused run in the session's folder from its .neurostack/ checkpoint. */
+  async function resumeFolderRun() {
+    const targetSession = sessionId;
+    const folder = targetSession ? sessionFolders.get(targetSession) : null;
+    if (!folder || isBusy(targetSession)) return;
+
+    setBusy(targetSession, true);
+    showChatArea();
+    const userRow = appendUserMessage(`📁 ${folder}\n\n⟳ Resume the interrupted run`);
+    try {
+      await streamFolderAgent({ targetSession, folder, prompt: null, resume: true, userRow });
+      loadSessions(true);
+    } catch (err) {
+      if (isViewing(targetSession)) await appendAIMessage('Folder agent failed to resume. Please try again.', 'error');
+    } finally {
+      setBusy(targetSession, false);
+    }
+  }
+
+  /**
+   * Runs the folder agent in a session's folder and streams its progress into a
+   * live panel in that session, including inline Allow/Deny prompts for commands
+   * that need approval. The panel keeps updating while the user is in another
+   * session and is re-shown on switching back. The final report is saved to the
+   * session's history by the server.
+   */
+  async function streamFolderAgent({ targetSession, folder, prompt, resume, userRow }) {
+    const row = document.createElement('div');
+    row.classList.add('message-row', 'neurostack');
+    row.innerHTML = `
+      <div class="msg-avatar neurostack">📁</div>
+      <div class="msg-content">
+        <div class="msg-bubble">
+          <div class="loop-header"><strong>Folder Agent</strong> <span class="loop-status">starting…</span></div>
+          <div class="folder-run-path msg-time"></div>
+          <div class="folder-approvals"></div>
+          <ol class="loop-steps"></ol>
+        </div>
+      </div>`;
+    row.querySelector('.folder-run-path').textContent = folder;
+    messagesContainer.appendChild(row);
+    liveRows.set(targetSession, [userRow, row]);
+    scrollToBottom();
+
+    const stepsEl = row.querySelector('.loop-steps');
+    const statusLabel = row.querySelector('.loop-status');
+    const approvalsEl = row.querySelector('.folder-approvals');
+    const addStep = (label) => {
+      const li = document.createElement('li');
+      li.textContent = label;
+      stepsEl.appendChild(li);
+      if (isViewing(targetSession)) scrollToBottom();
+    };
+    const setApprovalPending = (pending) => {
+      if (pending) approvalSessions.add(targetSession);
+      else if (!approvalsEl.children.length) approvalSessions.delete(targetSession);
+      refreshSessionBadges();
+      if (isViewing(targetSession)) refreshViewState();
+    };
+
+    let finalEvent = null;
+    let errorMessage = null;
+
+    const res = await fetch('/api/folder/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folder, prompt, resume, mode: folderModeSelect.value, sessionId: targetSession }),
+    });
+
+    if (!res.ok || !res.body) {
+      let reason = 'Failed to start the folder agent.';
+      try { reason = (await res.json()).content || reason; } catch { /* not JSON */ }
+      statusLabel.textContent = 'failed to start';
+      if (isViewing(targetSession)) await appendAIMessage(reason, 'error', null, false);
+      return;
+    }
+
+    await readSseEvents(res, (evt) => {
+      switch (evt.type) {
+        case 'round':
+          statusLabel.textContent = 'working';
+          addStep('⚙️ ' + evt.message);
+          break;
+        case 'handoff':
+          addStep('🔀 ' + evt.message);
+          break;
+        case 'approval_request':
+          statusLabel.textContent = 'awaiting approval';
+          showFolderApproval(evt, approvalsEl, addStep, setApprovalPending);
+          setApprovalPending(true);
+          break;
+        case 'done':
+          statusLabel.textContent = 'complete';
+          addStep('🏁 ' + evt.message);
+          break;
+        case 'paused':
+          statusLabel.textContent = 'paused';
+          addStep('⏸️ ' + evt.message);
+          break;
+        case 'error':
+          statusLabel.textContent = 'error';
+          errorMessage = evt.message;
+          addStep('⚠️ ' + evt.message);
+          break;
+        case 'result':
+          finalEvent = evt;
+          break;
+        default:
+          if (evt.message) addStep(evt.message);
+      }
+    });
+
+    // Not viewing this session: the server saved the report to its history,
+    // and it shows (with a sidebar refresh) when the user switches back.
+    if (!isViewing(targetSession)) return;
+
+    if (finalEvent) {
+      const status = finalEvent.data?.status || 'complete';
+      const handoffs = finalEvent.data?.handoffCount || 0;
+      statusLabel.textContent = status;
+      const note = status === 'paused' ? '\n\n_All models are rate-limited right now — use **⟳ Resume** later to continue._' : '';
+      await appendAIMessage(
+        `**Folder agent — ${status}** · ${handoffs} handoff(s)\n\n${finalEvent.message || ''}${note}`,
+        status === 'complete' ? 'neurostack' : 'system',
+        null,
+        false,
+      );
+    } else {
+      await appendAIMessage(`Folder agent failed: ${errorMessage || 'the run ended unexpectedly.'}`, 'error', null, false);
+    }
+  }
+
+  /** Inline Allow/Deny card for a command the agent wants to run. */
+  function showFolderApproval(evt, container, addStep, setApprovalPending) {
+    const box = document.createElement('div');
+    box.className = 'folder-approval';
+
+    const reason = document.createElement('div');
+    reason.textContent = '⚠️ ' + evt.message;
+    const command = document.createElement('code');
+    command.textContent = evt.data?.command || '';
+
+    const actions = document.createElement('div');
+    actions.className = 'folder-approval-actions';
+    const allowBtn = document.createElement('button');
+    allowBtn.className = 'folder-select-btn';
+    allowBtn.textContent = 'Allow';
+    const denyBtn = document.createElement('button');
+    denyBtn.className = 'folder-bar-btn';
+    denyBtn.textContent = 'Deny';
+
+    const decide = async (approved) => {
+      allowBtn.disabled = denyBtn.disabled = true;
+      try {
+        await fetch('/api/folder/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approvalId: evt.data?.approvalId, approved }),
+        });
+      } catch { /* the server auto-denies after a timeout */ }
+      box.remove();
+      setApprovalPending(false);
+      addStep(`${approved ? '✅ Allowed' : '⛔ Denied'}: ${evt.data?.command || ''}`);
+    };
+    allowBtn.addEventListener('click', () => decide(true));
+    denyBtn.addEventListener('click', () => decide(false));
+
+    actions.append(allowBtn, denyBtn);
+    box.append(reason, command, actions);
+    container.appendChild(box);
+    scrollToBottom();
+  }
+
+  // ═══════════════════════════════════════════════
+  //  AGENT LOOP (SSE streaming)
+  // ═══════════════════════════════════════════════
+
+  /**
+   * Runs an autonomous agent loop and renders live progress from the SSE stream.
+   * Each event updates a single progress panel; the final result appends a
+   * summary and (if changes were staged) a review button.
+   */
+  async function streamAgentLoop(requirement, targetSession, userRow) {
+    // Progress panel
+    const row = document.createElement('div');
+    row.classList.add('message-row', 'neurostack');
+    row.innerHTML = `
+      <div class="msg-avatar neurostack">🔁</div>
+      <div class="msg-content">
+        <div class="msg-bubble">
+          <div class="loop-header"><strong>Agent Loop</strong> <span class="loop-status">starting…</span></div>
+          <ol class="loop-steps"></ol>
+        </div>
+      </div>`;
+    messagesContainer.appendChild(row);
+    liveRows.set(targetSession, [userRow, row]);
+    scrollToBottom();
+
+    const stepsEl = row.querySelector('.loop-steps');
+    const statusLabel = row.querySelector('.loop-status');
+    const addStep = (label) => {
+      const li = document.createElement('li');
+      li.textContent = label;
+      stepsEl.appendChild(li);
+      if (isViewing(targetSession)) scrollToBottom();
+      return li;
+    };
+
+    const res = await fetch('/api/loop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requirement, sessionId: targetSession, autoApprove: true }),
+    });
+
+    if (!res.ok || !res.body) {
+      statusLabel.textContent = 'failed to start';
+      return;
+    }
+
+    let finalResult = null;
+    await readSseEvents(res, (evt) => {
+      if (evt.type === 'result') {
+        finalResult = evt.result;
+        return;
+      }
+      renderLoopEvent(evt, addStep, statusLabel);
+    });
 
     // Final summary
-    if (finalResult) {
+    if (finalResult && isViewing(targetSession)) {
       statusLabel.textContent = finalResult.stopReason;
       const met = finalResult.metCriteria?.length || 0;
       const total = met + (finalResult.unmetCriteria?.length || 0);
@@ -497,7 +899,6 @@ document.addEventListener('DOMContentLoaded', () => {
         false,
       );
     }
-    setStatus('ready', 'Ready');
   }
 
   function renderLoopEvent(evt, addStep, statusLabel) {
@@ -561,6 +962,7 @@ document.addEventListener('DOMContentLoaded', () => {
       messagesContainer.appendChild(row);
       scrollToBottom();
     }
+    return row;
   }
 
   /** Create a NeuroStack / system / error message with optional streaming effect */

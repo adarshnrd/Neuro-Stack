@@ -32,13 +32,21 @@ export async function requireAdmin(sessionId: string): Promise<CommandResult | n
  * an auth method), otherwise null. Until configured, git work is disabled.
  */
 export function requireGitHubConfig(): CommandResult | null {
-  const { owner, repo, token, authMode, appId } = config.github;
-  const hasAuth = authMode === 'app' ? !!appId : !!token;
+  const { owner, repo, token, authMode, appId, privateKey, installationId } = config.github;
 
   const missing: string[] = [];
   if (!owner) missing.push('GITHUB_OWNER');
   if (!repo) missing.push('GITHUB_REPO');
-  if (!hasAuth) missing.push('GITHUB_TOKEN (or the GitHub App variables)');
+  if (authMode === 'pat' && !token) missing.push('GITHUB_TOKEN');
+  if (authMode === 'app') {
+    if (!appId && !privateKey && !installationId) {
+      missing.push('GITHUB_TOKEN (or GITHUB_APP_ID + GITHUB_PRIVATE_KEY[_PATH] + GITHUB_INSTALLATION_ID)');
+    } else {
+      if (!appId) missing.push('GITHUB_APP_ID');
+      if (!privateKey) missing.push('GITHUB_PRIVATE_KEY or a readable GITHUB_PRIVATE_KEY_PATH');
+      if (!installationId) missing.push('GITHUB_INSTALLATION_ID');
+    }
+  }
 
   if (missing.length > 0) {
     return {

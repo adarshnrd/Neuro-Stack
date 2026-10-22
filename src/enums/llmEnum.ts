@@ -1,7 +1,5 @@
 export enum LLMProvider {
   GEMINI = 'gemini',
-  OPENAI = 'openai',
-  ANTHROPIC = 'anthropic',
   GROQ = 'groq',
   NVIDIA = 'nvidia',
   /** NVIDIA NIM, highest-parameter reasoning model (Nemotron Ultra). */

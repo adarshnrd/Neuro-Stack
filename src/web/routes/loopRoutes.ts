@@ -8,6 +8,9 @@ import { createChildLogger } from '../../logger/index.js';
 const router = express.Router();
 const log = createChildLogger('loopRoutes');
 
+// Each iteration is several LLM calls — never let a client request an unbounded run
+const MAX_ITERATIONS_LIMIT = 10;
+
 function sseInit(res: Response): void {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -45,11 +48,15 @@ async function pump(
  */
 router.post('/api/loop', async (req, res) => {
   try {
-    const { sessionId, requirement, slug, autoApprove, maxIterations } = req.body;
+    const { sessionId, requirement, slug, autoApprove, maxIterations } = req.body ?? {};
     const userId = req.userId;
 
     if (!userId) {
       res.status(401).json({ type: 'error', content: 'Authentication required.' });
+      return;
+    }
+    if (typeof sessionId !== 'string') {
+      res.status(400).json({ type: 'error', content: 'sessionId is required.' });
       return;
     }
     const session = await findSessionById(sessionId);
@@ -58,7 +65,12 @@ router.post('/api/loop', async (req, res) => {
       return;
     }
 
-    const spec = slug ? await loadTaskSpec(slug) : requirement ? taskSpecFromRequirement(requirement) : null;
+    const spec =
+      typeof slug === 'string' && slug
+        ? await loadTaskSpec(slug)
+        : typeof requirement === 'string' && requirement.trim()
+          ? taskSpecFromRequirement(requirement)
+          : null;
     if (!spec) {
       res.status(400).json({ type: 'error', content: 'Provide a requirement or a valid task slug.' });
       return;
@@ -72,7 +84,10 @@ router.post('/api/loop', async (req, res) => {
         sessionId,
         userId,
         autoApprove: autoApprove !== false,
-        maxIterations: typeof maxIterations === 'number' ? maxIterations : undefined,
+        maxIterations:
+          typeof maxIterations === 'number' && Number.isFinite(maxIterations)
+            ? Math.min(Math.max(Math.floor(maxIterations), 1), MAX_ITERATIONS_LIMIT)
+            : undefined,
       }),
     );
   } catch (error: unknown) {

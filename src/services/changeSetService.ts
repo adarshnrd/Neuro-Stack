@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ChangeSet, FileChange, ReviewComment } from '../types/reviewTypes.js';
 import { ChangeSetStatus, FileChangeStatus } from '../enums/reviewEnum.js';
 import { computeLineDiff } from '../utils/diffUtil.js';
-import { ensureDirectory, fileExists, resolveInsideRoot } from '../utils/fileUtil.js';
+import { ensureDirectory, fileExists, resolveInsideRoot, writeFileTransactional } from '../utils/fileUtil.js';
 import { config } from '../config/index.js';
 import { createChildLogger } from '../logger/index.js';
 
@@ -217,6 +217,10 @@ export class ChangeSetService {
   public async acceptChangeSet(changeSetId: string): Promise<void> {
     const changeSet = this.inMemoryStore.get(changeSetId);
     if (!changeSet) throw new Error(`ChangeSet not found: ${changeSetId}`);
+    // Re-applying an accepted/rejected changeset would overwrite newer work with stale content
+    if (changeSet.status !== ChangeSetStatus.PENDING && changeSet.status !== ChangeSetStatus.REVISION_REQUESTED) {
+      throw new Error(`ChangeSet is already ${changeSet.status}.`);
+    }
 
     for (const file of changeSet.files) {
       // File paths originated from the LLM — never let one escape the workspace
@@ -226,8 +230,7 @@ export class ChangeSetService {
           await fs.unlink(fullPath);
         }
       } else {
-        await ensureDirectory(path.dirname(fullPath));
-        await fs.writeFile(fullPath, file.proposedContent, 'utf-8');
+        await writeFileTransactional(fullPath, file.proposedContent);
       }
     }
 
@@ -243,6 +246,9 @@ export class ChangeSetService {
   public async rejectChangeSet(changeSetId: string): Promise<void> {
     const changeSet = this.inMemoryStore.get(changeSetId);
     if (!changeSet) throw new Error(`ChangeSet not found: ${changeSetId}`);
+    if (changeSet.status === ChangeSetStatus.ACCEPTED) {
+      throw new Error('ChangeSet was already accepted and applied.');
+    }
 
     changeSet.status = ChangeSetStatus.REJECTED;
     changeSet.updatedAt = new Date().toISOString();
