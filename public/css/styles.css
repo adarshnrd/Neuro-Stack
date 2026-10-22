@@ -472,6 +472,8 @@ body {
   background: var(--user-msg-bg);
   color: var(--user-msg-text);
   border-bottom-right-radius: var(--radius-sm);
+  white-space: pre-wrap; /* keep the user's line breaks (text is escaped, not markdown) */
+  overflow-wrap: anywhere;
 }
 
 /* NeuroStack bubble */
@@ -1151,4 +1153,277 @@ body {
   font-size: 0.88rem;
   line-height: 1.4;
   opacity: 0.92;
+}
+
+/* ══════════════════════════════════════════════════
+   FOLDER-AGENT MODE (chat)
+   ══════════════════════════════════════════════════ */
+
+.folder-btn.hidden,
+.folder-bar.hidden,
+.folder-modal.hidden,
+.folder-agent-link.hidden {
+  display: none !important;
+}
+
+.folder-btn {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.folder-btn:hover,
+.folder-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.folder-bar {
+  margin: 10px 20px 0;
+  padding: 6px 8px 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-glow);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.folder-bar-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl; /* keep the end of long paths visible */
+  text-align: left;
+}
+
+.folder-bar-mode select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  padding: 4px 6px;
+}
+
+.folder-bar-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.folder-bar-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.folder-bar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Folder picker dialog */
+.folder-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.folder-modal-card {
+  width: min(560px, 100%);
+  max-height: min(620px, 90vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.folder-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.folder-modal-header h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.folder-modal-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.folder-dir-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 160px;
+}
+
+.folder-dir-list li {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.folder-dir-list li:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.folder-dir-list li.folder-dir-empty {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.folder-dir-list li.folder-dir-empty:hover {
+  background: none;
+}
+
+.folder-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.folder-modal-hint {
+  flex: 1;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.folder-select-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.folder-select-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Inline command approval inside a folder-agent progress panel */
+.folder-approval {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.folder-approval code {
+  display: block;
+  margin: 6px 0 8px;
+  padding: 6px 8px;
+  background: var(--code-bg);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.folder-approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.folder-approval-actions .folder-select-btn,
+.folder-approval-actions .folder-bar-btn {
+  font-size: 0.75rem;
+  padding: 5px 12px;
+}
+
+@media (max-width: 768px) {
+  .folder-bar {
+    flex-wrap: wrap;
+  }
+
+  .folder-bar-path {
+    flex-basis: 100%;
+    order: -1;
+  }
+}
+
+/* Sidebar: per-session project folder + background activity */
+.session-item {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.session-folder {
+  flex-basis: 100%;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-item.running::before,
+.session-item.needs-approval::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--info);
+  animation: session-pulse 1.4s ease-in-out infinite;
+}
+
+.session-item.needs-approval::before {
+  background: var(--warning);
+}
+
+@keyframes session-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }

@@ -1,12 +1,16 @@
 {
   "name": "project-neurostack",
   "version": "1.0.0",
-  "description": "AI-Powered Git Workflow Assistant built with Node.js, LangChain, LangGraph, and Google Gemini.",
+  "description": "Autonomous multi-model AI development agent built with Node.js, LangChain, and LangGraph over Gemini, Groq, and NVIDIA NIM.",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npm run clean && tsc && npm run copy:views",
+    "copy:views": "node -e \"require('fs').cpSync('src/web/views', 'dist/web/views', { recursive: true })\"",
     "start": "node dist/index.js",
     "lint": "eslint src/ tests/",
     "typecheck": "tsc --noEmit",
@@ -15,7 +19,7 @@
     "smoke:providers": "tsx scripts/smokeProviders.ts",
     "eval": "tsx evals/runEvals.ts",
     "folder": "tsx scripts/agentFolder.ts",
-    "clean": "rm -rf dist/"
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
     "@langchain/core": "^1.0.0",

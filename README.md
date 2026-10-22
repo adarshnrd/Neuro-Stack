@@ -65,6 +65,7 @@ cp .env.example .env      # fill in the values below
 Run the SQL migrations in the Supabase SQL Editor, in order:
 1. `src/database/migrations/001_initial_schema.sql`
 2. `src/database/migrations/002_fix_rls_policies.sql`
+3. `src/database/migrations/003_session_folder.sql` (per-session project folder)
 
 ### Run
 ```bash
@@ -72,6 +73,12 @@ npm run dev               # web server at http://localhost:3000
 ```
 - Chat UI: `http://localhost:3000/app`
 - Folder Agent UI: `http://localhost:3000/folder`
+- Or work on a folder straight from chat (admins): click **📁** next to the input and pick a folder under
+  `FOLDER_AGENT_ROOT` — that folder is saved on the **session**, so each session can work on a different project,
+  and several sessions can run at the same time (switch freely; a pulsing dot marks sessions still working, amber
+  means one is waiting for your Allow/Deny). Prompts in a bound session run the agent in its folder, stream
+  progress into the conversation, and are saved to its history. **⟳ Resume** continues an interrupted run;
+  **✕** unbinds the folder and goes back to normal chat. Two sessions can't run in the *same* folder at once.
 
 Or drive the folder agent from the CLI (no server needed):
 ```bash
@@ -85,10 +92,11 @@ npm run folder /path/to/project "Add an Express /health endpoint with a test, th
 ```env
 # ── Server ──
 PORT=3000
-NODE_ENV=development
+HOST=localhost                        # 0.0.0.0 in Docker / on a server
+NODE_ENV=development                  # production: JSON logs, Secure cookies, SESSION_SECRET required
+TRUST_PROXY=                          # true / hop count, when behind a reverse proxy
 
 # ── Models ──
-LLM_PROVIDER=gemini
 LLM_MODEL=gemini-2.5-flash
 GOOGLE_API_KEY=                       # Gemini (primary coder/chat)
 GROQ_API_KEY=                         # Groq — fast fallback + summarize/validate roles
@@ -103,8 +111,9 @@ SUPA_BASE_PROJECT_URL=
 SUPA_BASE_DB_API_KEY=
 
 # ── Auth ──
-SESSION_SECRET=                       # ≥32 chars; generate with:
+SESSION_SECRET=                       # ≥32 chars, required in production; generate with:
                                       #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ALLOW_REGISTRATION=                   # open sign-up (default: on in dev, off in production; first user always allowed)
 
 # ── Folder Agent ──
 FOLDER_AGENT_ROOT=                    # base dir the web folder-picker may browse (default: home dir)
@@ -116,6 +125,19 @@ GITHUB_REPO=
 ```
 Only Gemini + Supabase are strictly required; Groq and NVIDIA are optional but unlock the fallback
 chains and reduce free-tier pausing.
+
+See `.env.example` for the full list (`LLM_TIMEOUT_MS`, `LOG_LEVEL`, `LOG_DIR`, GitHub App auth, …).
+
+### Production
+```bash
+npm run build && NODE_ENV=production npm start
+# or
+docker build -t neurostack . && docker run --env-file .env -p 3000:3000 neurostack
+```
+- Set `SESSION_SECRET`, `FOLDER_AGENT_ROOT`, and (behind a proxy) `TRUST_PROXY`.
+- Sign-up is closed in production unless `ALLOW_REGISTRATION=true`; the first account becomes admin.
+- The folder agent runs shell commands on the host, so it is admin-only and confined to `FOLDER_AGENT_ROOT`.
+- Rate limiting and pending approvals are in-memory: run a single instance.
 
 ---
 
@@ -192,10 +214,10 @@ Type in the chat UI at `/app`. Non-command messages are normal multi-turn conver
 | `@PR_REVIEW #42` | Fetch the PR diff and return an AI code review |
 | `@PR_APPROVE #42` | Submit an approving review on GitHub |
 | `@MERGE_PR #42 [--method squash]` | Merge a PR (verifies it's open, mergeable, not already merged) |
-| `@NEW_SESSION` | Archive the current session and start fresh |
 
 Generated changes never auto-apply in chat mode — you review and accept them. The PR commands
-need `GITHUB_OWNER`/`GITHUB_REPO` and a token/App configured; they return a clear message if not.
+need `GITHUB_OWNER`/`GITHUB_REPO` and a token/App configured; they return a clear message if not, and
+require the admin role. Use the sidebar's **New chat** button to start a fresh session.
 
 ---
 
@@ -223,10 +245,10 @@ Web (Express + Handlebars + SSE)  ─┬─  Chat UI (/app)        ── @comma
 
 ```
 src/
-  llm/            # provider factories, model router, role chains, agent loop, retry/failover
+  llm/            # provider factories, model router, role chains, agent loop, retry/timeout/failover
   graph/          # LangGraph agent-loop (state, nodes, workflow)
   services/       # folder agent, state store, workspace, verification, changeset, project indexer, auth…
-  tools/          # file, shell (run_command), verify (run_check), git, github tools
+  tools/          # file, shell (run_command), verify (run_check) — git stays manual, never an LLM tool
   commands/       # @command parser, registry, handlers
   web/            # Express routes (chat, folder, review, auth), middleware, Handlebars views
   database/       # Supabase client, repositories, SQL migrations
@@ -241,8 +263,9 @@ tests/            # vitest suite
 
 ## 🔐 Security
 
-Signed HMAC session tokens with expiry; bcrypt password hashing; per-user ownership checks on sessions
-and conversations; rate limiting on auth endpoints; security headers; path-traversal guards on all file
+Signed HMAC session tokens with expiry; bcrypt password hashing; sign-up closed by default in production;
+per-user ownership checks on sessions and conversations; admin-only folder agent and PR commands, with the
+folder agent confined to `FOLDER_AGENT_ROOT`; rate limiting on auth and chat endpoints; security headers; path-traversal guards on all file
 operations; sandboxed verification (checks run on a temp copy, never the real workspace before approval);
 DOMPurify sanitization of rendered model output; scoped, cwd-locked shell execution with a catastrophic-
 command denylist. Supabase RLS is locked down in migration `002`.
@@ -254,7 +277,7 @@ command denylist. Supabase RLS is locked down in migration `002`.
 | Script | Description |
 |--------|-------------|
 | `npm run dev` | Dev server with hot reload |
-| `npm run build` / `start` | Compile / run compiled server |
+| `npm run build` / `start` | Clean, compile (incl. views) / run compiled server |
 | `npm run folder …` | Folder agent CLI (start / resume / status) |
 | `npm test` | Vitest suite |
 | `npm run typecheck` | `tsc --noEmit` |

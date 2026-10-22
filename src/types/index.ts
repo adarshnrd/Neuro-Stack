@@ -5,7 +5,6 @@ export * from './chatTypes.js';
 export * from './reviewTypes.js';
 export * from './authTypes.js';
 export * from './conversationTypes.js';
-export * from './githubTypes.js';
 export * from './agentTaskTypes.js';
 export * from './workspaceTypes.js';
 export * from './stateStoreTypes.js';

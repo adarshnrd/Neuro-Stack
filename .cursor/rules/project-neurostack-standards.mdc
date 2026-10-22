@@ -16,7 +16,7 @@ Project NeuroStack is an **AI-powered Git workflow assistant** built on **Expres
 ```
 src/
   commands/             # Command parser, registry, and handler classes
-    handlers/           # Individual @command handler implementations (AgentHandler, NewSessionHandler, etc.)
+    handlers/           # Individual @command handler implementations (AgentHandler, CreatePrHandler, etc.)
   config/               # Zod-validated environment config + numeric defaults
   constants/            # Domain-specific constant modules (chat, command)
   enums/                # TypeScript enums (PascalCase names, no suffix required)
@@ -24,17 +24,19 @@ src/
   graph/                # LangGraph state definition, workflow compilation, and graph nodes
     nodes/              # Individual LangGraph node implementations
   llm/                  # LLM provider abstraction layer
-    providers/          # Concrete provider implementations (Gemini, future OpenAI)
+    providers/          # Concrete provider implementations (Gemini, Groq, NVIDIA NIM)
   logger/               # Winston structured logger with child logger factory
-  memory/               # Markdown-based context persistence (loader, writer, session, archive, prompt)
-  services/             # Business logic services (chat, context, git, github, session)
-  tools/                # LangChain tool wrappers (file, git, github operations)
-  types/                # TypeScript interfaces grouped by domain (config, command, session)
-  utils/                # Pure utility functions (file, date, string, validation)
+  memory/               # Markdown context loading (rules, command templates, learned patterns) + prompt assembly
+  database/             # Supabase client + repositories (users, sessions, conversations) and SQL migrations
+  services/             # Business logic services (chat, context, git, github, agent loop, folder agent)
+  tools/                # LangChain tool wrappers (file, shell, verification) — no git/GitHub tools by design
+  types/                # TypeScript interfaces grouped by domain (config, command, session, review)
+  utils/                # Pure utility functions (file, string, token, diff, validation)
   web/                  # Express server layer
-    routes/             # API routes (apiRoutes) and view routes (viewRoutes)
+    middleware/         # Auth, admin guard, rate limiting, security headers
+    routes/             # API, auth, review, loop, folder, and view routes
     views/              # Handlebars templates (.hbs)
-context/                # Markdown-based persistence (rules, commands, agents, sessions, memory, archive)
+context/                # Markdown context (rules, commands, agents, memory) + runtime changesets (gitignored)
 public/                 # Static web assets (CSS, JS, images)
 logs/                   # Runtime log files (error, combined, query-trace)
 workspace/              # Cloned repository working directory
@@ -49,7 +51,7 @@ plans/                  # Development plans and documentation
 - **Output:** `./dist` directory, **Root:** `./src`
 - **ESM project:** `"type": "module"` in `package.json` — all imports MUST include `.js` extension
 - **No path aliases** — use relative imports with `.js` extension throughout
-- **Node engines:** `>=18.x`
+- **Node engines:** `>=20`
 - **`skipLibCheck`:** enabled
 - **`forceConsistentCasingInFileNames`:** enabled
 - **`resolveJsonModule`:** enabled, **`allowJs`:** enabled
@@ -131,9 +133,9 @@ catch (error: any) {
 | Private members        | no underscore (dominant style)       | `private git`, `private loader`, `private octokit`   |
 | Readonly class fields  | `private readonly` (when applicable) | `private readonly contextService: ContextService`    |
 | Exported constants     | SCREAMING_SNAKE_CASE                 | `SYSTEM_PROMPT`, `AGENT_USAGE_GUIDE`, `SESSION_ACTIVE_WINDOW_HOURS` |
-| Enum names             | PascalCase (no suffix required)      | `CommandName`, `MergeMethod`, `SessionStatus`        |
-| Enum members           | SCREAMING_SNAKE_CASE                 | `AGENT`, `NEW_SESSION`, `MERGE`, `OPEN`              |
-| Files                  | camelCase `.ts`                      | `chatService.ts`, `gitTools.ts`, `commandEnum.ts`    |
+| Enum names             | PascalCase (no suffix required)      | `CommandName`, `MergeMethod`, `ChangeSetStatus`        |
+| Enum members           | SCREAMING_SNAKE_CASE                 | `AGENT`, `CREATE_PR`, `MERGE`, `PENDING`              |
+| Files                  | camelCase `.ts`                      | `chatService.ts`, `fileTools.ts`, `commandEnum.ts`    |
 | Folders                | camelCase                            | `commands/`, `services/`, `enums/`, `types/`, `utils/` |
 
 **Rule:** All folders and files in this project use **camelCase** uniformly. New files and folders MUST follow this convention.
@@ -152,7 +154,7 @@ catch (error: any) {
 ### Exports
 
 - **Named `export class`** for services, handlers, managers, and registries: `export class GitService { ... }`
-- **Named `export function`** for standalone functions and providers: `export function createLLMProvider(...)`
+- **Named `export function`** for standalone functions and providers: `export function createGeminiProvider(...)`
 - **Named exports** for enums, type aliases, and interfaces
 - **`export default router`** for Express route files (`apiRoutes.ts`, `viewRoutes.ts`)
 - **Re-exports** via barrel `index.ts` for organized module groups (`enums/index.ts`, `types/index.ts`, `errors/index.ts`)
@@ -179,7 +181,7 @@ catch (error: any) {
 ### General Type Rules
 
 - **Minimize `any`** — prefer `unknown`, generics, or concrete types in all new code
-- Interfaces live in `types/` organized by domain (`configTypes.ts`, `commandTypes.ts`, `sessionTypes.ts`)
+- Interfaces live in `types/` organized by domain (`configTypes.ts`, `commandTypes.ts`, `reviewTypes.ts`)
 - Interfaces do NOT use an `I` prefix in this project (e.g., `CommandHandler`, not `ICommandHandler`)
 - All `types/` modules are re-exported via `types/index.ts` barrel
 - The `CommandHandler` interface is the contract for all command handlers
@@ -304,8 +306,8 @@ All log calls use positional arguments: `log.level(message, metadataObject)`:
 
 ```typescript
 // CORRECT — this project's log format
-log.info('Creating new session', {
-  source: 'sessionManager#createSession',
+log.info('Session created', {
+  source: 'sessionRepository#createSession',
   sessionId,
   durationMs: Date.now() - startTime,
 });
@@ -378,7 +380,7 @@ Graph (Workflow + Nodes) → LLM Providers → Tools
 | **Memory**         | `memory/`        | Context persistence (read/write Markdown files, session management)   |
 | **Tools**          | `tools/`         | LangChain tool wrappers exposing service methods to the LLM          |
 | **Graph**          | `graph/`         | LangGraph workflow state management and node orchestration            |
-| **LLM**           | `llm/`           | Model provider abstraction (Gemini, future OpenAI)                    |
+| **LLM**           | `llm/`           | Role-based model routing over Gemini, Groq, NVIDIA NIM              |
 | **Config**         | `config/`        | Environment variable loading and Zod validation                       |
 | **Errors**         | `errors/`        | Custom error class hierarchy                                          |
 | **Utils**          | `utils/`         | Pure utility functions (no side effects, no logging dependency needed) |
@@ -465,8 +467,8 @@ export class SomeHandler implements CommandHandler {
 Handlers are registered in `src/index.ts` at bootstrap:
 
 ```typescript
-commandRegistry.register(new NewSessionHandler());
 commandRegistry.register(new AgentHandler());
+commandRegistry.register(new CreatePrHandler());
 ```
 
 ---
@@ -497,43 +499,41 @@ export const ALL_FILE_TOOLS = [readFileTool, writeFileTool, listDirectoryTool];
 
 ### Tool Rules
 
-- One file per tool domain (`fileTools.ts`, `gitTools.ts`, `githubTools.ts`)
+- One file per tool domain (`fileTools.ts`, `shellTools.ts`, `verifyTools.ts`)
+- No git/GitHub tools are exposed to the LLM — version control stays manual via `@CREATE_PR` etc.
+- Mutating file tools never bypass review: they stage into the active changeset, or write directly only inside a folder-agent workspace session
 - Each file exports individual named tool constants + an `ALL_*_TOOLS` aggregate array
 - Tool `name` uses `snake_case` (LangChain convention)
 - Tool `description` is a clear, concise English sentence
 - Tool schemas use Zod with `.describe()` on every field
 - Log every tool execution at `info` level with `source: 'toolModule#toolName'`
-- Tool index barrel (`tools/index.ts`) re-exports all aggregate arrays
+- Consumers import tools from their domain file directly (no tools barrel)
 
 ---
 
 ## LLM Provider Pattern
 
-The LLM layer abstracts model providers behind a factory function:
+Models are resolved per **role** (CHAT, CODER, PLANNER, REVIEWER, SUMMARIZER, VALIDATOR). `llm/roleChains.ts`
+holds the ordered provider preference per role; `llm/modelRouter.ts` filters it to the providers that have
+credentials and instantiates (and caches) the models:
 
 ```typescript
-// llm/provider.ts
-export function createLLMProvider(config: LLMConfig): BaseChatModel {
-  switch (config.provider as LLMProvider) {
-    case LLMProvider.GEMINI:
-      return createGeminiProvider(config);
-    case LLMProvider.OPENAI:
-      throw new Error('OpenAI provider not yet implemented');
-    default:
-      return createGeminiProvider(config);
-  }
-}
+// llm/modelRouter.ts
+const chain = resolveRoleChain(ModelRole.CODER); // [{ provider, model }, ...] — first is preferred
 
 // llm/providers/geminiProvider.ts
-export function createGeminiProvider(config: LLMConfig): ChatGoogle {
-  return new ChatGoogle({ model: config.model, apiKey: config.apiKey });
+export function createGeminiProvider(config: LLMConfig, options: GeminiProviderOptions = {}): ChatGoogle {
+  return new ChatGoogle({ model: config.model, apiKey: config.apiKey, temperature: options.temperature });
 }
 ```
+
+`llm/llmService.ts` invokes a role with a per-call timeout (`LLM_TIMEOUT_MS`), retries transient errors, and
+fails over down the chain on exhaustion.
 
 ### LLM Rules
 
 - New providers go in `llm/providers/` as a `create*Provider` function
-- Add new providers to the `LLMProvider` enum and the switch in `provider.ts`
+- Add new providers to the `LLMProvider` enum, the `instantiate` switch in `modelRouter.ts`, and the role chains in `roleChains.ts`
 - Always log provider initialization at `debug` level
 
 ---
@@ -586,10 +586,7 @@ export function buildGraph() {
 
 ```
 memory/
-  contextLoader.ts    — Read markdown context files (rules, templates, sessions, patterns)
-  contextWriter.ts    — Append to markdown context files (rules, learned patterns)
-  sessionManager.ts   — CRUD for session JSON + MD snapshot files
-  archiveManager.ts   — Cleanup and retention enforcement for archived sessions
+  contextLoader.ts    — Read markdown context files (rules, command templates, learned patterns)
   promptInjector.ts   — Assemble LangChain message arrays from context layers
   index.ts            — Barrel re-exports
 ```
@@ -601,15 +598,16 @@ Only relevant files are loaded — never all:
 2. `context/rules/anti_hallucination.md` — Always
 3. `context/agents/code_generation_guidelines.md` — For code tasks
 4. `context/commands/<command>.md` — If command detected
-5. `context/sessions/session_<id>.md` — Current session
-6. `context/memory/learned_patterns.md` — Learned corrections
+5. `context/memory/learned_patterns.md` — Learned corrections (curated by hand)
+
+Chat sessions and conversation history live in **Supabase** (`database/sessionRepository.ts`,
+`database/conversationRepository.ts`), not in markdown files.
 
 ### Context Write Strategy
 
-- **Rules/Commands/Agents**: Append-only, never overwritten by AI
-- **Sessions**: Created and updated during use (JSON + MD dual format)
-- **Memory**: Auto-appended when corrections or patterns are learned
-- **Archive**: Sessions moved here when archived, auto-purged based on retention days
+- **Rules/Commands/Agents/Memory**: Human-maintained markdown; never written by the AI
+- **Changesets**: `context/changesets/<sessionId>/` — staged agent edits awaiting review (runtime data, gitignored)
+- **Folder-agent state**: `<folder>/.neurostack/` — checkpoints for resumable runs
 
 ### Safe File Operations
 
@@ -627,21 +625,17 @@ import { fileExists, ensureDirectory, readJson, writeJson } from '../utils/fileU
 
 ## Service Pattern
 
-Services encapsulate business logic and delegate to memory/managers:
+Services encapsulate business logic and delegate to memory loaders and database repositories:
 
 ```typescript
-export class SessionService {
-  private sessionManager = new SessionManager();
-  private archiveManager = new ArchiveManager();
+export class ContextService {
+  private readonly loader = new ContextLoader();
 
-  async createSession(): Promise<Session> {
-    log.info('Creating new session', { source: 'sessionService#createSession' });
-    return this.sessionManager.createSession();
-  }
-
-  async archiveSession(sessionId: string): Promise<void> {
-    log.info('Archiving session', { source: 'sessionService#archiveSession', sessionId });
-    await this.sessionManager.archiveSession(sessionId);
+  public async loadForCommand(command: CommandName, sessionId: string): Promise<AssembledContext> {
+    log.info('Loading context for command', { source: 'contextService#loadForCommand', command, sessionId });
+    const systemRules = await this.loader.loadRules();
+    // ...
+    return { systemRules, commandTemplate, learnedPatterns };
   }
 }
 ```
@@ -690,12 +684,10 @@ Enums live in `src/enums/`, one file per domain, re-exported via `enums/index.ts
 // enums/commandEnum.ts
 export enum CommandName {
   AGENT = 'AGENT',
-  AGENT_FIX_CODE = 'AGENT_FIX_CODE',
   CREATE_PR = 'CREATE_PR',
   PR_REVIEW = 'PR_REVIEW',
   PR_APPROVE = 'PR_APPROVE',
   MERGE_PR = 'MERGE_PR',
-  NEW_SESSION = 'NEW_SESSION',
 }
 ```
 

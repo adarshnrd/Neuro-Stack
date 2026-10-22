@@ -24,7 +24,7 @@ const log = createChildLogger('agentHandler');
  *
  * Workflow:
  * 1. Validates that the user supplied a requirement.
- * 2. Loads all context layers (rules, command template, session, learned patterns).
+ * 2. Loads all context layers (rules, command template, learned patterns).
  * 3. Assembles the full prompt via {@link PromptInjector}.
  * 4. Invokes the configured LLM and returns its response as Markdown.
  */
@@ -150,7 +150,7 @@ export class AgentHandler implements CommandHandler {
   /**
    * Fetches all context layers for the AGENT command via {@link ContextService}.
    *
-   * @param sessionId - Used to load session-specific markdown context.
+   * @param sessionId - Used for structured logging.
    * @returns A fully populated {@link AssembledContext} object.
    */
   private async loadContext(sessionId: string): Promise<AssembledContext> {
@@ -165,7 +165,7 @@ export class AgentHandler implements CommandHandler {
   /**
    * Assembles the LangChain message array from all context layers and the user requirement.
    *
-   * @param context     - All markdown context layers (rules, template, session, patterns).
+   * @param context     - All markdown context layers (rules, template, patterns).
    * @param requirement - The user's raw requirement description.
    * @returns Ordered array of {@link BaseMessage} objects ready for LLM invocation.
    */
@@ -173,7 +173,6 @@ export class AgentHandler implements CommandHandler {
     return this.promptInjector.buildPrompt(
       `${context.systemRules}\n\n${AGENT_TOOL_GUIDANCE}`,
       context.commandTemplate,
-      context.sessionContext,
       context.learnedPatterns,
       requirement,
     );

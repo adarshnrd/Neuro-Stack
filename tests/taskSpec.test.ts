@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  loadTaskSpec,
   parseTaskSpec,
   serializeTaskSpec,
   slugify,
@@ -57,5 +58,13 @@ describe('taskSpecFromRequirement', () => {
   it('uses explicit criteria when the requirement includes a checklist', () => {
     const spec = taskSpecFromRequirement('Do stuff\n\n## Criteria\n- [ ] a\n- [ ] b');
     expect(spec.criteria).toHaveLength(2);
+  });
+});
+
+describe('loadTaskSpec', () => {
+  it('rejects slugs that could escape the tasks directory', async () => {
+    for (const slug of ['../../package', '..\secrets', '/etc/passwd', 'UPPER', '']) {
+      expect(await loadTaskSpec(slug), slug).toBeNull();
+    }
   });
 });

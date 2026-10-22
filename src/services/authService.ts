@@ -14,12 +14,28 @@ function issueToken(userId: string): string {
 }
 
 /**
+ * True when a new account may be created: sign-up is enabled, or no user
+ * exists yet (the first account bootstraps the admin).
+ */
+export async function isRegistrationOpen(): Promise<boolean> {
+  if (config.auth.allowRegistration) return true;
+  return (await getUserCount()) === 0;
+}
+
+/**
  * Registers a new user. The very first user to register becomes admin.
  */
 export async function registerUser(username: string, password: string): Promise<AuthResult> {
   log.info('Registration attempt', { source: 'authService#registerUser', username });
 
   try {
+    // Determine role — first user becomes admin
+    const userCount = await getUserCount();
+    if (userCount > 0 && !config.auth.allowRegistration) {
+      log.warn('Registration rejected — sign-up disabled', { source: 'authService#registerUser', username });
+      return { success: false, message: 'Registration is disabled. Ask an administrator for an account.' };
+    }
+
     // Check if user already exists
     const existing = await findUserByUsername(username);
     if (existing) {
@@ -27,8 +43,6 @@ export async function registerUser(username: string, password: string): Promise<
       return { success: false, message: 'Username already exists.' };
     }
 
-    // Determine role — first user becomes admin
-    const userCount = await getUserCount();
     const role = userCount === 0 ? UserRole.ADMIN : UserRole.USER;
 
     log.info('Assigning role to new user', { source: 'authService#registerUser', username, role, userCount });

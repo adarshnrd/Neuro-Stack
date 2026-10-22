@@ -8,7 +8,9 @@ import { createChildLogger } from '../logger/index.js';
 const log = createChildLogger('shellTools');
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+const KILL_GRACE_MS = 5_000;
 const OUTPUT_MAX_CHARS = 12_000;
+const IS_WINDOWS = process.platform === 'win32';
 
 interface ShellResult {
   code: number | null;
@@ -76,12 +78,26 @@ export const runCommandTool = tool(
   },
 );
 
-/** Executes a command in its own process group so the whole tree is killed on timeout. */
+/** Kills the command and everything it spawned (npm → node → …). */
+function killProcessTree(pid: number): void {
+  if (IS_WINDOWS) {
+    // Negative PIDs (process groups) don't exist on Windows — taskkill /T walks the tree.
+    spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true }).on('error', () => { /* already gone */ });
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch { /* already gone */ }
+}
+
+/** Executes a command (in its own process group on POSIX) so the whole tree is killed on timeout. */
 function runShell(command: string, cwd: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<ShellResult> {
   return new Promise((resolve) => {
-    const child = spawn(command, { cwd, shell: true, detached: true });
+    // detached on Windows would open a new console window; process groups are POSIX-only anyway
+    const child = spawn(command, { cwd, shell: true, detached: !IS_WINDOWS, windowsHide: true });
     let output = '';
     let timedOut = false;
+    let settled = false;
 
     const capture = (chunk: Buffer) => {
       if (output.length < OUTPUT_MAX_CHARS) output += chunk.toString();
@@ -89,24 +105,29 @@ function runShell(command: string, cwd: string, timeoutMs: number = DEFAULT_TIME
     child.stdout?.on('data', capture);
     child.stderr?.on('data', capture);
 
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        if (child.pid) process.kill(-child.pid, 'SIGKILL');
-      } catch { /* already gone */ }
-    }, timeoutMs);
-
     const finish = (code: number | null) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       const trimmed =
         output.length > OUTPUT_MAX_CHARS
-          ? `${output.slice(0, OUTPUT_MAX_CHARS)}\n…[truncated ${output.length - OUTPUT_MAX_CHARS} chars]`
+          ? `${output.slice(0, OUTPUT_MAX_CHARS)}
+…[truncated ${output.length - OUTPUT_MAX_CHARS} chars]`
           : output;
       resolve({ code, output: trimmed.trim(), timedOut });
     };
 
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (child.pid) killProcessTree(child.pid);
+      // If a grandchild keeps the pipes open, 'close' may never fire — don't hang the agent.
+      setTimeout(() => finish(null), KILL_GRACE_MS).unref();
+    }, timeoutMs);
+
     child.on('close', finish);
     child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       resolve({ code: null, output: `Failed to start command: ${err.message}`, timedOut });
     });

@@ -1,6 +1,5 @@
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { invokeLLM } from '../llm/llmService.js';
-import { config } from '../config/index.js';
 import { createChildLogger, withQueryId } from '../logger/index.js';
 import { parseUserInput } from '../commands/parser.js';
 import { commandRegistry } from '../commands/registry.js';
@@ -27,7 +26,7 @@ export async function handleChatMessage(
   traceLog.info('handleChatMessage entry', {
     source: 'chatService#handleChatMessage',
     sessionId,
-    message
+    messageLength: message.length,
   });
 
   try {
@@ -79,8 +78,6 @@ export async function handleChatMessage(
     traceLog.info('Invoking LLM for chat response', {
       source: 'chatService#handleChatMessage',
       sessionId,
-      provider: config.llm.provider,
-      model: config.llm.model
     });
 
     // Fetch conversation history for multi-turn context
@@ -129,9 +126,11 @@ export async function handleChatMessage(
       stack,
       sessionId
     });
+    // Provider/database internals stay in the logs; the reference lets support find them.
+    const reference = queryId ? ` (ref: ${queryId})` : '';
     return {
       type: 'error',
-      content: `Sorry, I encountered an error: ${message}`,
+      content: `Sorry, something went wrong while processing your request${reference}. Please try again.`,
     };
   }
 }

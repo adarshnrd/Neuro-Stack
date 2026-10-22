@@ -38,11 +38,6 @@ export const AGENT_TOOL_GUIDANCE: string = [
   '- When finished, summarize what you changed and why.',
 ].join('\n');
 
-/**
- * Description for the @REVIEW command.
- */
-export const REVIEW_COMMAND_DESCRIPTION: string = 'Review pending code changes in the visual diff viewer.';
-
 // ─── PR lifecycle command descriptions ────────────────────────────────────────
 export const CREATE_PR_COMMAND_DESCRIPTION: string = 'Commit the current workspace changes to a new branch and open a GitHub pull request.';
 export const PR_REVIEW_COMMAND_DESCRIPTION: string = 'Fetch a pull request diff and return an AI code review. Usage: @PR_REVIEW #42';

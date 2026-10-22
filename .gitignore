@@ -1,52 +1,15 @@
-# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
-
-# ── Build output ──────────────────────────────────────────────────────────────
 dist/
-build/
-
-# ── Environment ───────────────────────────────────────────────────────────────
-.env
-.env.local
-.env.*.local
-# Keep the example file
-!.env.example
-
-# ── NeuroStack agent ──────────────────────────────────────────────────────────
-workspace/
-
-# ── Logs ─────────────────────────────────────────────────────────────────────
 logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# ── Test coverage ─────────────────────────────────────────────────────────────
-coverage/
-.nyc_output/
-
-# ── TypeScript ────────────────────────────────────────────────────────────────
-*.tsbuildinfo
-
-# ── OS ───────────────────────────────────────────────────────────────────────
+workspace/
+.env
 .DS_Store
-.DS_Store?
-._*
-Thumbs.db
-ehthumbs.db
 
-# ── Editors ──────────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Runtime data written by the app (changesets, legacy session snapshots, task specs)
+context/changesets/
+context/sessions/
+context/archive/
+context/tasks/
 
-# ── Misc ─────────────────────────────────────────────────────────────────────
-*.tgz
-*.gz
-.cache/
-tmp/
-temp/
+# Folder-agent state written into target folders
+.neurostack/

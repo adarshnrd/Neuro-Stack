@@ -3,9 +3,17 @@ import { createAppAuth } from '@octokit/auth-app';
 import { config } from '../config/index.js';
 import { GitHubApiError } from '../errors/gitError.js';
 import { createChildLogger } from '../logger/index.js';
-import { MergeMethod, ReviewEvent, PRState } from '../enums/gitEnum.js';
+import { MergeMethod, ReviewEvent } from '../enums/gitEnum.js';
 
 const log = createChildLogger('githubService');
+
+/** Octokit errors carry the HTTP status; anything else maps to 500. */
+function httpStatusOf(error: unknown): number {
+  if (typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number') {
+    return error.status;
+  }
+  return 500;
+}
 
 export class GitHubService {
   private readonly octokit: Octokit;
@@ -52,7 +60,7 @@ export class GitHubService {
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      const status = httpStatusOf(error);
       log.error('Failed to create PR', { source: 'githubService#createPullRequest', error: message });
       throw new GitHubApiError('createPR', message, status, { head, base });
     }
@@ -71,7 +79,7 @@ export class GitHubService {
       return data;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      const status = httpStatusOf(error);
       log.error('Failed to get PR', { source: 'githubService#getPullRequest', error: message });
       throw new GitHubApiError('getPR', message, status, { prNumber });
     }
@@ -94,7 +102,7 @@ export class GitHubService {
       return diffStr;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      const status = httpStatusOf(error);
       log.error('Failed to get PR diff', { source: 'githubService#getPullRequestDiff', error: message });
       throw new GitHubApiError('getPRDiff', message, status, { prNumber });
     }
@@ -114,7 +122,7 @@ export class GitHubService {
       log.debug('PR review submitted successfully', { source: 'githubService#submitReview', durationMs: Date.now() - startTime });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      const status = httpStatusOf(error);
       log.error('Failed to submit review', { source: 'githubService#submitReview', error: message });
       throw new GitHubApiError('submitReview', message, status, { prNumber, event });
     }
@@ -133,28 +141,9 @@ export class GitHubService {
       log.debug('PR merged successfully', { source: 'githubService#mergePullRequest', durationMs: Date.now() - startTime });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
+      const status = httpStatusOf(error);
       log.error('Failed to merge PR', { source: 'githubService#mergePullRequest', error: message });
       throw new GitHubApiError('mergePR', message, status, { prNumber, method });
-    }
-  }
-
-  public async listPullRequests(state: PRState = PRState.OPEN) {
-    const startTime = Date.now();
-    try {
-      log.info('Listing PRs', { source: 'githubService#listPullRequests', state });
-      const { data } = await this.octokit.rest.pulls.list({
-        owner: config.github.owner,
-        repo: config.github.repo,
-        state,
-      });
-      log.debug('PR list fetched successfully', { source: 'githubService#listPullRequests', count: data.length, durationMs: Date.now() - startTime });
-      return data;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      const status = typeof error === 'object' && error !== null && 'status' in error ? (error as any).status : 500;
-      log.error('Failed to list PRs', { source: 'githubService#listPullRequests', error: message });
-      throw new GitHubApiError('listPRs', message, status, { state });
     }
   }
 }

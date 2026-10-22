@@ -36,7 +36,7 @@ describe('parseUserInput', () => {
   });
 
   it('handles a bare command with no body', () => {
-    const result = parseUserInput('@NEW_SESSION');
+    const result = parseUserInput('@AGENT');
     expect(result.isCommand).toBe(true);
     expect(result.args.requirement).toBe('');
   });

@@ -36,6 +36,15 @@ export async function checkSupabaseConnection(): Promise<boolean> {
       });
       return false;
     }
+    // Newest migration's column. The app still runs without it (no per-session folders), so warn loudly.
+    const { error: schemaError } = await supabase.from('sessions').select('folder_path').limit(1);
+    if (schemaError) {
+      log.error('Database schema is out of date — run src/database/migrations/003_session_folder.sql in the Supabase SQL Editor', {
+        source: 'supabaseClient#checkSupabaseConnection',
+        error: schemaError.message,
+      });
+    }
+
     log.info('Supabase connection verified', { source: 'supabaseClient#checkSupabaseConnection' });
     return true;
   } catch (error: unknown) {

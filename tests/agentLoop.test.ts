@@ -139,9 +139,59 @@ describe('runAgentLoop', () => {
 
   it('does not hand off on a fatal (non-exhaustion) error', async () => {
     fakeState.providers = ['primary', 'secondary'];
-    fakeState.queues.primary = [new Error('Invalid API key')];
+    fakeState.queues.primary = [new Error('400 bad request: unknown field "foo"')];
     fakeState.queues.secondary = [new AIMessage('should not reach here')];
 
-    await expect(runAgentLoop([new HumanMessage('go')], [echoTool])).rejects.toThrow(/Invalid API key/);
+    await expect(runAgentLoop([new HumanMessage('go')], [echoTool])).rejects.toThrow(/bad request/);
+  });
+
+  it('skips a provider with an invalid API key and keeps going down the chain', async () => {
+    fakeState.providers = ['gemini', 'groq', 'nvidia'];
+    fakeState.queues.gemini = [new Error('You exceeded your current quota')];
+    fakeState.queues.groq = [new Error('401 {"error":{"message":"Invalid API Key","code":"invalid_api_key"}}')];
+    fakeState.queues.nvidia = [new AIMessage('done by nvidia')];
+
+    const result = await runAgentLoop([new HumanMessage('go')], [echoTool]);
+    expect(result.content).toBe('done by nvidia');
+    expect(result.handoffCount).toBe(2);
+  });
+
+  it('nudges, then stops, a model that keeps repeating the same tool call with the same result', async () => {
+    fakeState.queues.primary = [
+      ...Array.from({ length: 5 }, (_, index) => toolCall('echo', { text: 'same' }, `c${index}`)),
+      new AIMessage('stopped repeating — summary'),
+    ];
+    const result = await runAgentLoop([new HumanMessage('go')], [echoTool]);
+
+    expect(result.stalled).toBe(true);
+    expect(result.hitRoundCap).toBe(false);
+    expect(result.rounds).toBe(5);
+    expect(result.content).toBe('stopped repeating — summary');
+
+    // After the 3rd identical round the model is told to stop repeating itself
+    const fourthCall = fakeState.invocations[3].messages.map((m) => String(m.content));
+    expect(fourthCall.some((text) => text.includes('exact same tool call'))).toBe(true);
+  });
+
+  it('does not treat different results as a stall', async () => {
+    fakeState.queues.primary = [
+      toolCall('echo', { text: 'a' }, 'c1'),
+      toolCall('echo', { text: 'b' }, 'c2'),
+      toolCall('echo', { text: 'c' }, 'c3'),
+      toolCall('echo', { text: 'd' }, 'c4'),
+      toolCall('echo', { text: 'e' }, 'c5'),
+      new AIMessage('done'),
+    ];
+    const result = await runAgentLoop([new HumanMessage('go')], [echoTool]);
+    expect(result.stalled).toBe(false);
+    expect(result.rounds).toBe(6);
+  });
+
+  it('surfaces the quota error (resumable) when the last provider only fails on a bad key', async () => {
+    fakeState.providers = ['gemini', 'groq'];
+    fakeState.queues.gemini = [new Error('You exceeded your current quota')];
+    fakeState.queues.groq = [new Error('401 Invalid API Key')];
+
+    await expect(runAgentLoop([new HumanMessage('go')], [echoTool])).rejects.toThrow(/quota/);
   });
 });

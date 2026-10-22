@@ -39,7 +39,7 @@
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         New Session
       </button>
-      <a href="/folder" class="folder-agent-link" style="display:block; margin-top:10px; text-align:center; font-size:.85rem; color:#7dd3fc; text-decoration:none;">🔁 Folder Agent →</a>
+      <a href="/folder" id="folder-agent-link" class="folder-agent-link hidden" style="display:block; margin-top:10px; text-align:center; font-size:.85rem; color:#7dd3fc; text-decoration:none;">🔁 Folder Agent →</a>
     </aside>
 
     <!-- ── Main Chat ── -->
@@ -90,7 +90,21 @@
       <!-- Input area -->
       <div class="chat-input-area">
         <div id="command-popup" class="command-popup"></div>
+        <!-- Active folder (folder-agent mode) — shown once a folder is picked -->
+        <div id="folder-bar" class="folder-bar hidden">
+          <span class="folder-bar-icon">📁</span>
+          <span id="folder-bar-path" class="folder-bar-path" title=""></span>
+          <label class="folder-bar-mode">
+            <select id="folder-mode" title="Command approval mode">
+              <option value="auto">auto · ask for risky commands</option>
+              <option value="manual">manual · ask for every command</option>
+            </select>
+          </label>
+          <button id="folder-resume-btn" class="folder-bar-btn" title="Resume an interrupted run in this folder">⟳ Resume</button>
+          <button id="folder-clear-btn" class="folder-bar-btn" title="Leave folder mode and chat normally">✕</button>
+        </div>
         <div class="chat-input-wrapper">
+          <button id="folder-btn" class="folder-btn hidden" title="Work in a local folder (folder agent)">📁</button>
           <textarea id="chat-input" placeholder="Ask NeuroStack anything, or type @ for commands..." rows="1"></textarea>
           <button id="send-btn" title="Send message (Enter)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -127,6 +141,26 @@
         <button id="review-accept-btn" class="btn-accept">Accept Changes</button>
         <button id="review-reject-btn" class="btn-reject">Reject</button>
         <button id="review-revise-btn" class="btn-revise">Request Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Folder picker (folder-agent mode) -->
+  <div id="folder-modal" class="folder-modal hidden" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
+    <div class="folder-modal-card">
+      <div class="folder-modal-header">
+        <h3 id="folder-modal-title">Choose a project folder</h3>
+        <button id="folder-modal-close" class="icon-btn" title="Close">×</button>
+      </div>
+      <div class="folder-modal-path">
+        <button id="folder-parent-btn" class="folder-bar-btn" title="Up one level">⬆</button>
+        <span id="folder-current-path">…</span>
+      </div>
+      <ul id="folder-dir-list" class="folder-dir-list"></ul>
+      <div class="folder-modal-footer">
+        <span class="folder-modal-hint">The agent edits files and runs commands directly in this folder.</span>
+        <button id="folder-cancel-btn" class="folder-bar-btn">Cancel</button>
+        <button id="folder-select-btn" class="folder-select-btn">Use this folder</button>
       </div>
     </div>
   </div>

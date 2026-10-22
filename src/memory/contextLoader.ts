@@ -33,12 +33,6 @@ export class ContextLoader {
     return template;
   }
 
-  public async loadSessionContext(sessionId: string): Promise<string> {
-    log.debug('Loading session context', { source: 'contextLoader#loadSessionContext', sessionId });
-    const context = await this.readFileSafe(path.join(config.context.basePath, 'sessions', `session_${sessionId}.md`));
-    return context;
-  }
-
   public async loadLearnedPatterns(): Promise<string> {
     log.debug('Loading learned patterns', { source: 'contextLoader#loadLearnedPatterns' });
     const patterns = await this.readFileSafe(path.join(config.context.basePath, 'memory', 'learned_patterns.md'));

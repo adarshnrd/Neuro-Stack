@@ -5,7 +5,7 @@ import { GitHubService } from '../../services/githubService.js';
 import { config } from '../../config/index.js';
 import { createChildLogger } from '../../logger/index.js';
 import { CREATE_PR_COMMAND_DESCRIPTION } from '../../constants/commandConstants.js';
-import { branchSlug, requireGitHubConfig, toErrorResult } from './prHandlerUtil.js';
+import { branchSlug, requireAdmin, requireGitHubConfig, toErrorResult } from './prHandlerUtil.js';
 
 const log = createChildLogger('createPrHandler');
 
@@ -30,6 +30,10 @@ export class CreatePrHandler implements CommandHandler {
   public async execute(args: CommandArgs, sessionId: string): Promise<CommandResult> {
     const configError = requireGitHubConfig();
     if (configError) return configError;
+
+    // Pushes to the shared repository — same admin gate as review/approve/merge
+    const forbidden = await requireAdmin(sessionId);
+    if (forbidden) return forbidden;
 
     const git = this.gitOverride ?? new GitService();
     const github = this.githubOverride ?? new GitHubService();
@@ -75,6 +79,18 @@ export class CreatePrHandler implements CommandHandler {
         error: error instanceof Error ? error.message : String(error),
       });
       return toErrorResult('Create PR', error);
+    } finally {
+      // Leave the shared workspace on the base branch so the next run doesn't
+      // build on top of this PR's branch. Best effort — never masks the result.
+      try {
+        await git.checkoutBranch(base);
+      } catch (error: unknown) {
+        log.warn('Could not switch workspace back to base branch', {
+          source: 'createPrHandler#execute',
+          base,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 }

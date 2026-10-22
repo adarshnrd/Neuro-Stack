@@ -10,13 +10,20 @@ import {
   findSessionById,
   touchSession,
   setSessionTitleIfEmpty,
+  setSessionFolder,
 } from '../../database/sessionRepository.js';
+import { resolveAllowedFolder } from '../../services/workspaceService.js';
+import { ValidationError } from '../../errors/validationError.js';
+import { DatabaseSchemaError } from '../../errors/databaseError.js';
+import { UserRole } from '../../enums/authEnum.js';
 import { getConversationsPaginated } from '../../database/conversationRepository.js';
-import { truncateText } from '../../utils/stringUtil.js';
+import { isUuid, truncateText } from '../../utils/stringUtil.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 const log = createChildLogger('apiRoutes');
+
+const MAX_CHAT_MESSAGE_CHARS = 20_000;
 
 // Each chat message costs an LLM call — cap per-client throughput
 const chatLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, name: 'chat' });
@@ -24,7 +31,7 @@ const chatLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, name: 'cha
 /**
  * Health check
  */
-router.get('/api/health', (req, res) => {
+router.get('/api/health', (_req, res) => {
   log.debug('Health check requested', { source: 'apiRoutes#getHealth' });
   res.json({ status: 'ok' });
 });
@@ -48,6 +55,14 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
     if (!message || typeof message !== 'string') {
       traceLog.warn('Validation failed: Message is required', { source: 'apiRoutes#postChat' });
       res.status(400).json({ type: 'error', content: 'Message is required.' });
+      return;
+    }
+    if (message.length > MAX_CHAT_MESSAGE_CHARS) {
+      res.status(413).json({ type: 'error', content: `Message is too long (max ${MAX_CHAT_MESSAGE_CHARS} characters).` });
+      return;
+    }
+    if (sessionId !== undefined && sessionId !== null && typeof sessionId !== 'string') {
+      res.status(400).json({ type: 'error', content: 'sessionId must be a string.' });
       return;
     }
 
@@ -123,7 +138,7 @@ router.post('/api/chat', chatLimiter, async (req, res) => {
  * GET /api/commands
  * Returns the list of available @ commands with descriptions
  */
-router.get('/api/commands', (req, res) => {
+router.get('/api/commands', (_req, res) => {
   log.debug('Commands list requested', { source: 'apiRoutes#getCommands' });
 
   // Only advertise commands that actually have a registered handler
@@ -203,6 +218,44 @@ router.get('/api/sessions/:sessionId', async (req, res) => {
 });
 
 /**
+ * PATCH /api/sessions/:sessionId
+ * Body: { folderPath: string | null }
+ * Binds the session to a local project folder (admin only — the folder agent
+ * runs commands on this host), or clears it with null. Only the owner may update.
+ */
+router.patch('/api/sessions/:sessionId', async (req, res) => {
+  try {
+    const { folderPath } = req.body ?? {};
+    if (folderPath === undefined) {
+      res.status(400).json({ type: 'error', content: 'folderPath is required (a path, or null to clear).' });
+      return;
+    }
+    if (req.userRole !== UserRole.ADMIN) {
+      res.status(403).json({ type: 'error', content: 'Binding a folder requires admin privileges.' });
+      return;
+    }
+
+    const session = await findSessionById(req.params.sessionId);
+    if (!session || session.userId !== req.userId) {
+      res.status(404).json({ type: 'error', content: 'Session not found.' });
+      return;
+    }
+
+    const resolvedFolder = folderPath === null ? null : resolveAllowedFolder(folderPath);
+    const updated = await setSessionFolder(session.id, resolvedFolder);
+    res.json({ session: updated });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof ValidationError || error instanceof DatabaseSchemaError) {
+      res.status(error.statusCode).json({ type: 'error', content: message });
+      return;
+    }
+    log.error('Failed to update session', { source: 'apiRoutes#patchSession', error: message });
+    res.status(500).json({ type: 'error', content: 'Internal server error.' });
+  }
+});
+
+/**
  * GET /api/sessions/:sessionId/conversations
  * Paginated conversation history for a session. Only the owner may read it.
  * Query params: cursor (uuid, optional), limit (number, default 10, max 100)
@@ -210,7 +263,7 @@ router.get('/api/sessions/:sessionId', async (req, res) => {
 router.get('/api/sessions/:sessionId/conversations', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const cursor = req.query.cursor as string | undefined;
+    const cursor = isUuid(req.query.cursor) ? req.query.cursor : undefined;
     const limit = Math.min(Math.max(parseInt(req.query.limit as string || '10', 10) || 10, 1), 100);
 
     const session = await findSessionById(sessionId);

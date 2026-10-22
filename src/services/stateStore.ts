@@ -196,15 +196,25 @@ export class StateStore {
    * (stale lock), it is reclaimed. Throws if a live process holds it.
    */
   async acquireLock(): Promise<void> {
-    const lockPath = this.file('.lock');
-    if (await fileExists(lockPath)) {
-      const holder = await this.readJson<{ pid: number }>('.lock');
-      if (holder && isProcessAlive(holder.pid)) {
-        throw new Error('Another NeuroStack run is active on this folder (lock held).');
-      }
-      log.warn('Reclaiming stale lock', { source: 'stateStore#acquireLock' });
+    await fs.mkdir(this.dir, { recursive: true });
+    const lockBody = JSON.stringify({ pid: process.pid, at: new Date().toISOString() });
+    try {
+      // 'wx' fails if the file exists — an atomic create, so two runs started at
+      // the same moment (e.g. from two chat sessions) can't both take the lock.
+      await fs.writeFile(this.file('.lock'), lockBody, { flag: 'wx' });
+      return;
+    } catch (error: unknown) {
+      const alreadyLocked = typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
+      if (!alreadyLocked) throw error;
     }
-    await this.writeJsonAtomic('.lock', { pid: process.pid, at: new Date().toISOString() });
+
+    // Held by this server process (another run) or a live CLI run → refuse; otherwise it's stale.
+    const holder = await this.readJson<{ pid: number }>('.lock');
+    if (holder && isProcessAlive(holder.pid)) {
+      throw new Error('Another NeuroStack run is already active in this folder. Wait for it to finish.');
+    }
+    log.warn('Reclaiming stale lock', { source: 'stateStore#acquireLock', dir: this.dir });
+    await this.writeTextAtomic('.lock', lockBody);
   }
 
   async releaseLock(): Promise<void> {

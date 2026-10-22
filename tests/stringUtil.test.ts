@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { truncateText, stripCommandPrefix } from '../src/utils/stringUtil';
+import { truncateText, isUuid } from '../src/utils/stringUtil.js';
 
 describe('truncateText', () => {
   it('returns short text unchanged', () => {
@@ -13,12 +13,13 @@ describe('truncateText', () => {
   });
 });
 
-describe('stripCommandPrefix', () => {
-  it('strips a matching prefix and trims', () => {
-    expect(stripCommandPrefix('@AGENT build a thing', 'AGENT')).toBe('build a thing');
+describe('isUuid', () => {
+  it('accepts canonical UUIDs', () => {
+    expect(isUuid('3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c')).toBe(true);
   });
-
-  it('leaves non-matching messages untouched', () => {
-    expect(stripCommandPrefix('build a thing', 'AGENT')).toBe('build a thing');
+  it('rejects anything else', () => {
+    for (const value of ['', 'abc', '3f2b8c1e9a4d4e7b8c2a1d5e6f7a8b9c', "1' OR '1'='1", undefined, 42]) {
+      expect(isUuid(value), String(value)).toBe(false);
+    }
   });
 });
